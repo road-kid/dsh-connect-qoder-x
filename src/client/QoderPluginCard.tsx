@@ -265,6 +265,22 @@ const primaryButtonStyle: CSSProperties = {
   color: 'var(--dsw-alias-label-primary-foreground)',
 }
 
+/**
+ * The destructive action's tone: solid error fill while confirmed, and a
+ * quiet outline before that. Both derive from the error token pair so the
+ * theme stays the single source of the colour.
+ */
+const dangerButtonStyle: CSSProperties = {
+  ...buttonStyle,
+  borderColor: 'var(--dsw-alias-state-error-primary)',
+  background: 'var(--dsw-alias-state-error-primary)',
+  color: 'var(--dsw-alias-label-primary-foreground)',
+}
+const quietDangerButtonStyle: CSSProperties = {
+  ...buttonStyle,
+  color: 'var(--dsw-alias-state-error-primary)',
+}
+
 /* ---- Segmented Tab Switcher styles (Figure 1) ---- */
 const segmentedContainerStyle: CSSProperties = {
   display: 'flex',
@@ -603,7 +619,12 @@ function ModelSwitchTable({
         ) : null}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--dsw-alias-border-l2)' }}>
+      {/*
+       * Batch controls live in ONE header row beside the select-all checkbox
+       * (was: a second button row competing with it). The count and the two
+       * batch actions only render once something is selected.
+       */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--dsw-alias-border-l2)' }}>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, userSelect: 'none' }}>
           <input
             type="checkbox"
@@ -613,30 +634,30 @@ function ModelSwitchTable({
           />
           <span>{allFilteredSelected ? t('modelsDeselectAll') : t('modelsSelectAll')}</span>
         </label>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {selected.size > 0 ? (
+        {selected.size === 0 ? null : (
+          <>
             <span style={modelRateStyle}>
               {t('modelsSelectedCount', { count: selected.size })}
             </span>
-          ) : null}
-          <button
-            type="button"
-            style={buttonStyle}
-            disabled={disabled || selected.size === 0}
-            onClick={() => { handleBatch(true) }}
-          >
-            {t('modelsEnableSelected')}
-          </button>
-          <button
-            type="button"
-            style={buttonStyle}
-            disabled={disabled || selected.size === 0}
-            onClick={() => { handleBatch(false) }}
-          >
-            {t('modelsDisableSelected')}
-          </button>
-        </div>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              style={buttonStyle}
+              disabled={disabled}
+              onClick={() => { handleBatch(true) }}
+            >
+              {t('modelsEnableSelected')}
+            </button>
+            <button
+              type="button"
+              style={buttonStyle}
+              disabled={disabled}
+              onClick={() => { handleBatch(false) }}
+            >
+              {t('modelsDisableSelected')}
+            </button>
+          </>
+        )}
       </div>
 
       {filteredList.length === 0 ? (
@@ -895,6 +916,8 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   const [checkingIn, setCheckingIn] = useState(false)
   const [clearingLogs, setClearingLogs] = useState(false)
   const [checkInNotice, setCheckInNotice] = useState<string>()
+  /** 「清除 PAT」的内联确认：点一次进入确认，再点一次才真正清除。 */
+  const [confirmingClear, setConfirmingClear] = useState(false)
   const mounted = useRef(true)
   const readSeq = useRef(0)
   const manualControllers = useRef(new Set<AbortController>())
@@ -1214,6 +1237,8 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
         signal: controller.signal,
         body: JSON.stringify({ action: 'clear' }),
       })
+      // Whatever the outcome, the inline confirm has served its purpose.
+      setConfirmingClear(false)
       const value: unknown = await response.json().catch(() => undefined)
       const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
       if (!response.ok || record['ok'] !== true) {
@@ -1391,13 +1416,31 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
             {status?.status !== 'signed-in' || status.authKey === undefined
               ? null
               : <>
-                  <button type="button" style={buttonStyle} disabled={busy || patBusy} onClick={beginReplace}>
+                  <button type="button" style={primaryButtonStyle} disabled={busy || patBusy} onClick={beginReplace}>
                     {t('patReplace')}
                   </button>
-                  <button type="button" style={buttonStyle} disabled={busy || patBusy} onClick={() => { void clearPat() }}>
-                    {patBusy ? t('patClearing') : t('patClear')}
-                  </button>
-                </>}
+                  {/*
+                   * Clearing the PAT is the one destructive action on this
+                   * row: it renders in the danger tone and demands an inline
+                   * confirm, instead of sitting next to 「更换」 at the same
+                   * visual weight (was: three equally-weighted buttons, one
+                   * of which could drop the working credential on a slip).
+                   */}
+                  {confirmingClear
+                    ? <>
+                        <span style={modelRateStyle}>{t('patClearConfirm')}</span>
+                        <button type="button" style={dangerButtonStyle} disabled={busy || patBusy} onClick={() => { void clearPat() }}>
+                          {patBusy ? t('patClearing') : t('patClearConfirmYes')}
+                        </button>
+                        <button type="button" style={buttonStyle} disabled={patBusy} onClick={() => { setConfirmingClear(false) }}>
+                          {t('cancel')}
+                        </button>
+                      </>
+                    : <button type="button" style={quietDangerButtonStyle} disabled={busy || patBusy} onClick={() => { setConfirmingClear(true) }}>
+                        {t('patClear')}
+                      </button>}
+                </>
+            }
           </div>
           {readFailure === undefined || signedInState === undefined
             ? null

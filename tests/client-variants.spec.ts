@@ -324,7 +324,11 @@ describe('plugin card per variant', () => {
     await act(async () => { for (const release of pendingAuth.splice(0)) release() })
     expect(posts(QODER_AUTH_PATH)).toEqual([{ action: 'save-pat', pat: 'a-brand-new-pat' }])
 
+    // The destructive clear now confirms inline before it posts: the arming
+    // press sends nothing NEW (the save above is still the only POST).
     await press(en.patClear)
+    expect(posts(QODER_AUTH_PATH)).toEqual([{ action: 'save-pat', pat: 'a-brand-new-pat' }])
+    await press(en.patClearConfirmYes)
     await act(async () => { for (const release of pendingAuth.splice(0)) release() })
     expect(posts(QODER_AUTH_PATH)).toContainEqual({ action: 'clear' })
   })

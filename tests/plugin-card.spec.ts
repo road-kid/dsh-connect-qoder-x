@@ -235,10 +235,16 @@ describe('Qoder plugin card', () => {
     expect(posts).toEqual([])
   })
 
-  it('Clear PAT posts the clear action and re-reads to the signed-out entry', async () => {
+  it('Clear PAT confirms inline, then posts the clear action and re-reads to the signed-out entry', async () => {
     holdPosts = true
     await mount()
+    // First press only ARMS the confirm — nothing is sent yet.
     await press(en.patClear)
+    expect(posts).toHaveLength(0)
+    expect(buttonLabels()).toContain(en.patClearConfirmYes)
+    expect(buttonLabels()).toContain(en.cancel)
+    // The confirm press sends the write.
+    await press(en.patClearConfirmYes)
     expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'clear' })
     expect(buttonLabels()).toContain(en.patClearing)
     signedOut()
