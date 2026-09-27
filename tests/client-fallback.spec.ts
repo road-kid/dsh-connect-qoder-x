@@ -43,16 +43,16 @@ const VARIANT_STATUS: Record<string, string> = {
  * `QUOTA_SETTINGS_NAMESPACE` is the 0.1.5 namespace the Host serves this
  * plugin's quota section under; `ENTRY_ID` is the 0.1.7 `configForms` key,
  * which is the PROFILE ENTRY ID (this bundle's patch inserts the row as
- * `llm-qoder`), not the package name. The `SHARED_*` pair is the《插件设置》
+ * `llm-qoder-x`), not the package name. The `SHARED_*` pair is the《插件设置》
  * block the three connect plugins rendezvous on.
  */
 const QUOTA_SETTINGS_NAMESPACE = 'qoder-quota'
-const ENTRY_ID = 'llm-qoder'
+const ENTRY_ID = 'llm-qoder-x'
 const SHARED_SECTION_SLOT = 'settings.section'
 const SHARED_SECTION_ID = 'plugin-settings'
 const SHARED_SECTION_ORDER = 900
 const SHARED_ITEM_SLOT = 'plugin-settings.item'
-const SHARED_ITEM_ID = 'dsh-qoder-connect'
+const SHARED_ITEM_ID = 'dsh-connect-qoder-x'
 const SHARED_SECTION_LABEL = '插件设置'
 
 /** Minimal component stand-in: the mirror never renders anything. */
@@ -69,7 +69,7 @@ const Component = (): null => null
 function apply(ctx: any): void {
   try {
     const namespace = 'settings.qoder'
-    ctx.effect(() => ctx.locale.register(namespace, { zh: {}, en: {} }), 'dsh-qoder-connect: settings copy')
+    ctx.effect(() => ctx.locale.register(namespace, { zh: {}, en: {} }), 'dsh-connect-qoder-x: settings copy')
     const t = ctx.locale.bind(namespace)
 
     // 1. Shared quota-settings card, registered first so it sits above the two
@@ -115,7 +115,7 @@ function apply(ctx: any): void {
               children: { [SHARED_ITEM_SLOT]: { kind: 'list', scope: 'root' } },
             }, Component)
           } catch (error: unknown) {
-            console.error('[dsh-qoder-connect] shared plugin-settings block lost the race; attaching to the winner:', error)
+            console.error('[dsh-connect-qoder-x] shared plugin-settings block lost the race; attaching to the winner:', error)
           }
         }
         const disposeItem = registerUnifiedCard(SHARED_ITEM_SLOT)
@@ -129,7 +129,7 @@ function apply(ctx: any): void {
       try {
         adoptQuotaScope(scopeCtx.settingsScope.bind({ namespace: QUOTA_SETTINGS_NAMESPACE }))
       } catch (error: unknown) {
-        console.error('[dsh-qoder-connect] quota settings scope unavailable (sidebar cards stay hidden):', error)
+        console.error('[dsh-connect-qoder-x] quota settings scope unavailable (sidebar cards stay hidden):', error)
       }
       registerUnifiedCard('settings.plugin.item')
     })
@@ -138,7 +138,7 @@ function apply(ctx: any): void {
         const forms = scopeCtx.configForms
         adoptQuotaScope(forms.get(ENTRY_ID))
       } catch (error: unknown) {
-        console.error('[dsh-qoder-connect] quota configuration form unavailable (sidebar cards stay hidden):', error)
+        console.error('[dsh-connect-qoder-x] quota configuration form unavailable (sidebar cards stay hidden):', error)
       }
       joinSharedSettingsBlock()
     })
@@ -152,7 +152,7 @@ function apply(ctx: any): void {
     const notifyDashboard = (): void => {}
     const refreshDashboard = async (_options: { force?: boolean } = {}): Promise<void> => {}
 
-    ctx.effect(() => Component(), 'dsh-qoder-connect: quota styles')
+    ctx.effect(() => Component(), 'dsh-connect-qoder-x: quota styles')
 
     const panelFace = (): any => ({
       t,
@@ -172,7 +172,7 @@ function apply(ctx: any): void {
           try {
             layout.selectPanel(CONVERSATION_PANEL_ID)
           } catch (error: unknown) {
-            console.error('[dsh-qoder-connect] could not close the quota panel:', error)
+            console.error('[dsh-connect-qoder-x] could not close the quota panel:', error)
           }
         }
       },
@@ -185,7 +185,7 @@ function apply(ctx: any): void {
         Component,
       ))
     } catch (error: unknown) {
-      console.error('[dsh-qoder-connect] could not register the quota dashboard:', error)
+      console.error('[dsh-connect-qoder-x] could not register the quota dashboard:', error)
     }
 
     ctx.inject(['layout'], (layoutCtx: any) => {
@@ -220,7 +220,7 @@ function apply(ctx: any): void {
           }, Component))
         }
       } catch (error: unknown) {
-        console.error('[dsh-qoder-connect] could not register the sidebar footer card:', error)
+        console.error('[dsh-connect-qoder-x] could not register the sidebar footer card:', error)
       }
     })
 
@@ -234,7 +234,7 @@ function apply(ctx: any): void {
     })
   } catch (error: unknown) {
     // Degrade silently on the page: the host provider still serves models.
-    console.error('[dsh-qoder-connect] client card failed to load (host provider unaffected):', error)
+    console.error('[dsh-connect-qoder-x] client card failed to load (host provider unaffected):', error)
   }
 }
 
@@ -334,7 +334,7 @@ describe('client card fallback', () => {
 
     // The error is visible in the console for developers.
     expect(errors).toHaveLength(1)
-    expect(errors[0]).toContain('[dsh-qoder-connect] client card failed to load')
+    expect(errors[0]).toContain('[dsh-connect-qoder-x] client card failed to load')
     expect(errors[0]).toContain('requires options.key')
 
     restore()
@@ -401,7 +401,7 @@ describe('client card fallback', () => {
     expect(seatIds.sort()).toEqual(['qoder-global-quota', 'qoder-probe', 'qoder-quota'])
     // The probe seat belongs to the international-or-not composer chrome this
     // plugin owns; its route pair is what the control reads.
-    expect(QODER_PROBE_PATH).toBe('/plugins/dsh-qoder-connect/probe')
+    expect(QODER_PROBE_PATH).toBe('/plugins/dsh-connect-qoder-x/probe')
 
     restore()
   })
@@ -505,8 +505,8 @@ describe('mirror stays verbatim with src/client/index.tsx', () => {
   })
 
   it('every effect label and locale namespace in the entry is mirrored', () => {
-    const labels = [...entrySource.matchAll(/,\s*'(dsh-qoder-connect: [^']+)'/g)].map(match => match[1]!)
-    expect(labels).toEqual(['dsh-qoder-connect: settings copy', 'dsh-qoder-connect: quota styles'])
+    const labels = [...entrySource.matchAll(/,\s*'(dsh-connect-qoder-x: [^']+)'/g)].map(match => match[1]!)
+    expect(labels).toEqual(['dsh-connect-qoder-x: settings copy', 'dsh-connect-qoder-x: quota styles'])
     for (const label of labels) expect(mirrorSource).toContain(label)
     // The two locale namespaces and the settings namespace the scope binds.
     expect(entrySource).toContain("'settings.qoder'")

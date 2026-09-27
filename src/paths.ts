@@ -2,7 +2,7 @@
  * The plugin's data directory — the ONE place every file the plugin owns
  * lives.
  *
- * Layout: `<profile>/.dsh-qoder-connect/state/` (the profile discovered
+ * Layout: `<profile>/.dsh-connect-qoder-x/state/` (the profile discovered
  * the same way the credential store always did). Everything — PAT files,
  * saved catalogs, probe records, the host heartbeat, and the machine-id
  * seed — writes there, so a profile directory never collects loose
@@ -16,7 +16,7 @@
  * directory without pulling in the credential code (and its upstream
  * dependency) — these modules stay leaf-light on purpose.
  *
- * @module dsh-qoder-connect/paths
+ * @module dsh-connect-qoder-x/paths
  */
 
 import { readFileSync, readdirSync, realpathSync, type Dirent } from 'node:fs'
@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 /** The per-profile directory the plugin's data folder lives under. */
-export const QODER_DATA_DIR_NAME = '.dsh-qoder-connect'
+export const QODER_DATA_DIR_NAME = '.dsh-connect-qoder-x'
 
 /** The directory inside the data dir where the rebuildable state files live. */
 export const QODER_STATE_DIR_NAME = 'state'
@@ -36,7 +36,7 @@ export const QODER_DATA_DIR_ENV = 'DSH_QODER_DATA_DIR'
 const PROFILES_DIR_NAME = 'profiles'
 
 /** The npm name of this package, as a profile's manifest declares it. */
-const PLUGIN_PACKAGE_NAME = 'dsh-qoder-connect'
+const PLUGIN_PACKAGE_NAME = 'dsh-connect-qoder-x'
 
 function pluginPackageRoot(): string | undefined {
   try {
@@ -53,7 +53,7 @@ function pluginPackageRoot(): string | undefined {
  *
  * Read from the profile's manifest rather than inferred from this module's own
  * location, because DSH installs a plugin into a profile by *link*: the manifest
- * carries `"dsh-qoder-connect": "link:/path/to/checkout"`, while Node
+ * carries `"dsh-connect-qoder-x": "link:/path/to/checkout"`, while Node
  * resolves the module to that real path, which lies outside `$DSH_HOME` entirely.
  * Walking up from the module would therefore miss the profile for exactly the
  * install shape a developer uses.
@@ -118,7 +118,7 @@ function discoverProfileDir(): string | undefined {
 }
 
 /**
- * The plugin's data directory: `<profile>/.dsh-qoder-connect`.
+ * The plugin's data directory: `<profile>/.dsh-connect-qoder-x`.
  *
  * Falls back to the Harness home when no profile can be discovered — a
  * checkout running its own tests, or a host that loads the plugin from

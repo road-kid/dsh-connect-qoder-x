@@ -162,7 +162,7 @@ describe('Qoder Host settings integration', () => {
   })
 
   it('exposes the provider directory entry, the settings section, and the fallback model list', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-settings-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-settings-'))
     stubEnvRoot()
     // This case asserts the fallback roster, which is served only to a
     // signed-in variant. Pinning a credential of its own keeps that independent
@@ -233,7 +233,7 @@ describe('Qoder Host settings integration', () => {
    * DSH is already running surface without a restart.
    */
   it('registers both variants and keeps each variant identity separate', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-dual-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-dual-'))
     stubEnvRoot()
     // Shorten the credential sweep: a group appears only once the sweep has
     // adopted the credential it finds in the temporary home.
@@ -344,7 +344,7 @@ describe('Qoder Host settings integration', () => {
    * publish fallback models that could only fail on the first message.
    */
   it('hides a variant with no usable credential while still registering it', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-empty-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-empty-'))
     // The temporary data dir is empty: neither variant's own credential file
     // exists and no environment PAT is set, which is what "nobody has signed
     // in" now means.
@@ -376,7 +376,7 @@ describe('Qoder Host settings integration', () => {
    * authority, and without one the arm's own env variable signs it in.
    */
   it('signs in a variant from its environment PAT when no file exists', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-env-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-env-'))
     stubEnvRoot()
     vi.stubEnv('QODER_PERSONAL_ACCESS_TOKEN', 'pt-from-environment')
     vi.stubEnv('DSH_QODER_POLL_MS', '100')
@@ -402,7 +402,7 @@ describe('Qoder Host settings integration', () => {
    * observable contract is that such a file never reveals models.
    */
   it('refuses a legacy credential file instead of treating it as a PAT', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-legacy-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-legacy-'))
     stubEnvRoot()
     vi.stubEnv('DSH_QODER_POLL_MS', '100')
     // The WorkBuddy-era shape: an accessToken document where a Qoder PAT
@@ -434,7 +434,7 @@ describe('Qoder Host settings integration', () => {
    * the two sidebar toggles plus one rate limit honoured at the schema edge.
    */
   it('validates and persists the quota section', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-quota-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-quota-'))
     stubEnvRoot()
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline in tests') }))
     const ctx = new Context()
@@ -469,7 +469,7 @@ describe('Qoder Host settings integration', () => {
     expect(row.billing).toEqual({ credits: 'x1', free: false })
     expect(row.reasoning).toBeUndefined()
     // The roster lives where the plan says it does, one file per variant.
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-ident-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-ident-'))
     await mkdir(join(root, 'state'), { recursive: true })
     stubEnvRoot()
     expect(Qoder.qoderCatalogPath(Qoder.GLOBAL_VARIANT.catalogFilename))
@@ -479,7 +479,7 @@ describe('Qoder Host settings integration', () => {
   })
 
   it('supplies an attachment facade covering imageLimits, readImageRequest, and saveImage to transport and client', async () => {
-    root = await mkdtemp(join(tmpdir(), 'dsh-qoder-connect-attachments-'))
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-attachments-'))
     await mkdir(join(root, 'state'), { recursive: true })
     await writeFile(join(root, 'state', 'auth-qoder.json'), credentialDocument(PAT_CN, 'china'))
     stubEnvRoot()

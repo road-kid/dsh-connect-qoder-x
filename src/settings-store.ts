@@ -8,7 +8,7 @@
  * (`configEditor.edit`), which reconciles the whole loader tree and hot-reloads
  * the plugin's fiber (~1–1.5 s, plus a storm of client mirror refreshes) on
  * EVERY write — one per toggled switch. The plugin's own files (the credential,
- * the catalog cache) have always lived in `<profile>/.dsh-qoder-connect/`, so
+ * the catalog cache) have always lived in `<profile>/.dsh-connect-qoder-x/`, so
  * the settings move there too: a write becomes a small atomic local file write
  * with an in-memory apply, no tree reconcile, no reload.
  *
@@ -18,15 +18,15 @@
  * The data directory is resolved by `qoderPluginDataDir()` — the ONE discovery
  * implementation this plugin already has (env override, then the declaring
  * profile, then the installing link). It is deliberately not re-implemented
- * here: a second copy of that logic is how a nested `.dsh-qoder-connect/
- * .dsh-qoder-connect/` path gets shipped.
+ * here: a second copy of that logic is how a nested `.dsh-connect-qoder-x/
+ * .dsh-connect-qoder-x/` path gets shipped.
  *
  * MIGRATION (one time)
  *   the file is absent → seed it from the entry config's own fields → write the
  *   file → delete ONLY this plugin's fields from the entry config (see
  *   ./index.ts), so the profile row returns to its shipped state.
  *
- * @module dsh-qoder-connect/settings-store
+ * @module dsh-connect-qoder-x/settings-store
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -110,7 +110,7 @@ function dshHome(): string {
  * imports only the sections whose names match a profile entry id. This
  * plugin's 0.1.5 sections were keyed by its SERVED NAMESPACES (`qoder`,
  * `qoder-global`, `qoder-quota`), which name no entry in the profile — the row
- * is `llm-qoder` — so the platform refuses them and their data survives only
+ * is `llm-qoder-x` — so the platform refuses them and their data survives only
  * in the renamed document. Reading it here recovers that data independently of
  * the platform's import, its section-name mapping, and its timing.
  *

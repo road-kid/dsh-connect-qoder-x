@@ -15,7 +15,7 @@
  * the same ids and routes from the Node-free `status-paths.ts`, which stays the
  * single source shared by both halves.
  *
- * @module dsh-qoder-connect/variants
+ * @module dsh-connect-qoder-x/variants
  */
 
 import {

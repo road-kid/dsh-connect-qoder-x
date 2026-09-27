@@ -59,7 +59,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Stable browser-plugin name. */
-export const name = 'dsh-qoder-connect-client'
+export const name = 'dsh-connect-qoder-x-client'
 /**
  * Client services this bundle requires BEFORE it activates.
  *
@@ -107,13 +107,13 @@ const QUOTA_SETTINGS_NAMESPACE = 'qoder-quota'
  * (`dsh-settings/lib/index.js:411-421`, `dsh-config-editor/lib/index.js:29-44`),
  * and cordis keeps an explicit row id (`cordis-plugin-loader/lib/index.js:162`).
  * This bundle's own patch inserts that row with an explicit id —
- * `cordis.patch.yml`: `- insert: [{ id: llm-qoder, name: dsh-qoder-connect }]` —
- * so `llm-qoder` is the namespace the Host serves here. A profile that composes
+ * `cordis.patch.yml`: `- insert: [{ id: llm-qoder-x, name: dsh-connect-qoder-x }]` —
+ * so `llm-qoder-x` is the namespace the Host serves here. A profile that composes
  * this bundle under some other id (the package name is what an entry without an
  * explicit id falls back to) would serve that id instead; the card then reads
  * `unavailable` and stays hidden rather than showing another plugin's values.
  */
-const ENTRY_ID = 'llm-qoder'
+const ENTRY_ID = 'llm-qoder-x'
 
 /**
  * The shared 《插件设置》 block's slot and entry ids.
@@ -130,7 +130,7 @@ const SHARED_SECTION_ID = 'plugin-settings'
 const SHARED_SECTION_ORDER = 900
 const SHARED_ITEM_SLOT = 'plugin-settings.item'
 /** This plugin's entry id inside the shared block: its package name (unique). */
-const SHARED_ITEM_ID = 'dsh-qoder-connect'
+const SHARED_ITEM_ID = 'dsh-connect-qoder-x'
 /** The shared block's title, fixed by the contract so all three plugins agree. */
 const SHARED_SECTION_LABEL = '插件设置'
 
@@ -176,7 +176,7 @@ function PluginSettingsSection(
  * example the rc.6→rc.7 `id`→`key` / `order`→`priority` rename) degrades
  * to a `console.error` instead of throwing into the DSH loader and raising
  * the red "Failed to load plugins" banner. The host provider keeps working:
- * the `qoder` model channel is unaffected, and `dsh-qoder-connect
+ * the `qoder` model channel is unaffected, and `dsh-connect-qoder-x
  * status` reports host health via the heartbeat file.
  *
  * Card ORDER: the Plugins tab dispatches `settings.plugin.item` in
@@ -195,7 +195,7 @@ function PluginSettingsSection(
 export function apply(ctx: ClientContext): void {
   try {
     const namespace = 'settings.qoder'
-    ctx.effect(() => ctx.locale.register(namespace, { zh, en }), 'dsh-qoder-connect: settings copy')
+    ctx.effect(() => ctx.locale.register(namespace, { zh, en }), 'dsh-connect-qoder-x: settings copy')
     const t = ctx.locale.bind(namespace) as QoderPluginCardInjected['t']
 
     // 1. Shared quota-settings card. Card ORDER is priority-ascending in the
@@ -290,7 +290,7 @@ export function apply(ctx: ClientContext): void {
           } catch (error: unknown) {
             // A sibling registered the container between the probe and this
             // call: their declaration is the live one, so attach to it.
-            console.error('[dsh-qoder-connect] shared plugin-settings block lost the race; attaching to the winner:', error)
+            console.error('[dsh-connect-qoder-x] shared plugin-settings block lost the race; attaching to the winner:', error)
           }
         }
         const disposeItem = registerUnifiedCard(SHARED_ITEM_SLOT)
@@ -302,7 +302,7 @@ export function apply(ctx: ClientContext): void {
     }
 
     /**
-     * 插件自有配置（`<profile>/.dsh-qoder-connect/settings.json`）：两条宿主线的
+     * 插件自有配置（`<profile>/.dsh-connect-qoder-x/settings.json`）：两条宿主线的
      * 读写都走宿主半的 settings face，不再经过 settingsScope / configForms。
      *
      * 0.1.7 的 configForms 写入会整树 reconcile + fiber 热重载（每次约
@@ -498,13 +498,13 @@ export function apply(ctx: ClientContext): void {
           try {
             layout.selectPanel(CONVERSATION_PANEL_ID)
           } catch (error: unknown) {
-            console.error('[dsh-qoder-connect] could not close the quota panel:', error)
+            console.error('[dsh-connect-qoder-x] could not close the quota panel:', error)
           }
         }
       },
     })
 
-    ctx.effect(() => injectQuotaCss(), 'dsh-qoder-connect: quota styles')
+    ctx.effect(() => injectQuotaCss(), 'dsh-connect-qoder-x: quota styles')
 
     // The dashboard cell itself needs no gate: registering for a declaration
     // that never arrives is a no-op by construction.
@@ -514,7 +514,7 @@ export function apply(ctx: ClientContext): void {
         QuotaDashboardWithLifecycle as never,
       ))
     } catch (error: unknown) {
-      console.error('[dsh-qoder-connect] could not register the quota dashboard:', error)
+      console.error('[dsh-connect-qoder-x] could not register the quota dashboard:', error)
     }
 
     ctx.inject(['layout'], layoutCtx => {
@@ -560,7 +560,7 @@ export function apply(ctx: ClientContext): void {
           } as never, SidebarQuotaCard))
         }
       } catch (error: unknown) {
-        console.error('[dsh-qoder-connect] could not register the sidebar footer card:', error)
+        console.error('[dsh-connect-qoder-x] could not register the sidebar footer card:', error)
       }
     })
 
@@ -580,6 +580,6 @@ export function apply(ctx: ClientContext): void {
   } catch (error: unknown) {
     // Degrade silently on the page: the host provider still serves models.
     // Developers see the full cause in the browser console; users see no banner.
-    console.error('[dsh-qoder-connect] client card failed to load (host provider unaffected):', error)
+    console.error('[dsh-connect-qoder-x] client card failed to load (host provider unaffected):', error)
   }
 }

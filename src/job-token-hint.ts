@@ -26,7 +26,7 @@
  * The host half alone produces these rows; without a client renderer the title
  * is the recorded name, which is why it is the ASCII `qoder`.
  *
- * @module dsh-qoder-connect/job-token-hint
+ * @module dsh-connect-qoder-x/job-token-hint
  */
 
 import type { Context } from '@deepseek-ai/cordis'

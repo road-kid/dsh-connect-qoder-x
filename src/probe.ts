@@ -17,7 +17,7 @@
  * successful sweep means "the upstream accepted these spellings", not "these
  * spellings change how the model thinks".
  *
- * @module dsh-qoder-connect/probe
+ * @module dsh-connect-qoder-x/probe
  */
 
 import { randomBytes } from 'node:crypto'

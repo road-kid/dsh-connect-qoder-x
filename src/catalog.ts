@@ -8,7 +8,7 @@
  * `src/qoder/catalog.ts` is the upstream's. `upstream.ts` translates one into
  * the other.
  *
- * @module dsh-qoder-connect/catalog
+ * @module dsh-connect-qoder-x/catalog
  */
 
 /** One model entry the adapter exposes. */

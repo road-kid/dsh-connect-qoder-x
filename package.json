@@ -1,7 +1,7 @@
 {
-  "name": "dsh-qoder-connect",
-  "displayName": "DSH Qoder Connect",
-  "description": "将 Qoder（国内版 / 国际版）的模型接入 DeepSeek Harness — bring Qoder (CN & international) models into DeepSeek Harness.",
+  "name": "dsh-connect-qoder-x",
+  "displayName": "DSH Qoder Connect X",
+  "description": "将 Qoder（国内版 / 国际版）的模型接入 DeepSeek Harness — road-kid fork of dsh-qoder-connect, ported to the DSH 0.1.7 plugin-configuration surface.",
   "version": "0.2.0",
   "author": "corrinehu",
   "keywords": [
@@ -19,7 +19,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "bin": {
-    "dsh-qoder-connect": "lib/bin.js"
+    "dsh-connect-qoder-x": "lib/bin.js"
   },
   "scripts": {
     "prepack": "npm run build",
@@ -51,10 +51,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/masknull/dsh-qoder-connect.git"
+    "url": "git+https://github.com/road-kid/dsh-connect-qoder-x.git"
   },
-  "homepage": "https://github.com/masknull/dsh-qoder-connect#readme",
-  "bugs": "https://github.com/masknull/dsh-qoder-connect/issues",
+  "homepage": "https://github.com/road-kid/dsh-connect-qoder-x#readme",
+  "bugs": {
+    "url": "https://github.com/road-kid/dsh-connect-qoder-x/issues"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

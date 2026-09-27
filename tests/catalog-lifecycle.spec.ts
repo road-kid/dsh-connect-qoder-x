@@ -421,7 +421,7 @@ describe('catalog lifecycle', () => {
     }, { timeout: 10_000 })
 
     const routes = FakeWebServer.current!.routes
-    expect(routes.has('/plugins/dsh-qoder-connect/status')).toBe(true)
+    expect(routes.has('/plugins/dsh-connect-qoder-x/status')).toBe(true)
     const server = await serve(routes)
     const get = async (path: string) => JSON.parse((await (await fetch(`http://127.0.0.1:${server.port}${path}`, { headers: { host: `127.0.0.1:${server.port}` } })).text()))
     const post = async (path: string, key: string, body: unknown) =>
@@ -432,7 +432,7 @@ describe('catalog lifecycle', () => {
       })
 
     // A's observation is live on the card before the switch.
-    const before = await get('/plugins/dsh-qoder-connect/status')
+    const before = await get('/plugins/dsh-connect-qoder-x/status')
     const key = before.probeKey as string
     expect(before.probe.results.map((r: { id: string }) => r.id)).toContain('acct-a-model')
     expect(before.catalog.source).toBe('live')
@@ -441,12 +441,12 @@ describe('catalog lifecycle', () => {
     await writeFile(cnPath, credentialDocument(PAT_B))
     failCatalog = true
 
-    const failed = await post('/plugins/dsh-qoder-connect/probe', key, { action: 'refresh' })
+    const failed = await post('/plugins/dsh-connect-qoder-x/probe', key, { action: 'refresh' })
     expect(failed.status).toBe(200)
     expect(await failed.json()).toMatchObject({ state: 'failed' })
 
     // The invariant: nothing of account A's survives a confirmed switch.
-    const after = await get('/plugins/dsh-qoder-connect/status')
+    const after = await get('/plugins/dsh-connect-qoder-x/status')
     expect(after.probe.results).toEqual([])
     expect(after.catalog.source).toBe('fallback')
     expect(String(after.catalog.error)).toMatch(/503|status/u)
@@ -457,7 +457,7 @@ describe('catalog lifecycle', () => {
     // Recovery: the same manual action once the upstream answers again.
     failCatalog = false
     rosterModel = 'acct-b-model'
-    const ok = await post('/plugins/dsh-qoder-connect/probe', key, { action: 'refresh' })
+    const ok = await post('/plugins/dsh-connect-qoder-x/probe', key, { action: 'refresh' })
     expect(await ok.json()).toMatchObject({ state: 'refreshed' })
     await vi.waitFor(async () => {
       expect((await ctx.llm.listModels('qoder')).map(model => model.id)).toEqual(['acct-b-model'])
@@ -498,12 +498,12 @@ describe('catalog lifecycle', () => {
     const server = await serve(routes)
     const get = async (path: string) => JSON.parse((await (await fetch(`http://127.0.0.1:${server.port}${path}`, { headers: { host: `127.0.0.1:${server.port}` } })).text()))
 
-    const signedOut = await get('/plugins/dsh-qoder-connect/status')
+    const signedOut = await get('/plugins/dsh-connect-qoder-x/status')
     expect(signedOut.status).toBe('signed-out')
     const authKey = signedOut.authKey as string
 
     // Sign in through the real route, exactly as the card's Save button does.
-    const saved = await fetch(`http://127.0.0.1:${server.port}/plugins/dsh-qoder-connect/auth`, {
+    const saved = await fetch(`http://127.0.0.1:${server.port}/plugins/dsh-connect-qoder-x/auth`, {
       method: 'POST',
       headers: {
         host: `127.0.0.1:${server.port}`,
@@ -515,7 +515,7 @@ describe('catalog lifecycle', () => {
     expect(await saved.json()).toMatchObject({ ok: true })
 
     // No waiting, no polling: the very next read must already be the live list.
-    const afterSave = await get('/plugins/dsh-qoder-connect/status')
+    const afterSave = await get('/plugins/dsh-connect-qoder-x/status')
     expect(afterSave.catalog.source).toBe('live')
     expect(afterSave.models.map((model: { id: string }) => model.id)).toEqual(['fresh-model'])
     expect((await ctx.llm.listModels('qoder')).map(model => model.id)).toEqual(['fresh-model'])

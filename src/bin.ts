@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Standalone status/diagnostics/PAT CLI for the dsh-qoder-connect bundle. */
+/** Standalone status/diagnostics/PAT CLI for the dsh-connect-qoder-x bundle. */
 
 import { realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -29,7 +29,7 @@ function safeMessage(error: unknown): string {
 
 function printHelp(): void {
   process.stdout.write([
-    'Usage: dsh-qoder-connect <doctor|status|pat|logout|catalog> [--provider <id>] [--json] [--file <path>]',
+    'Usage: dsh-connect-qoder-x <doctor|status|pat|logout|catalog> [--provider <id>] [--json] [--file <path>]',
     '',
     '  doctor         secret-free environment diagnostics',
     '  status         credential state and remaining Qoder credit',
@@ -80,7 +80,7 @@ async function doctor(jsonOutput: boolean, variant: QoderVariant): Promise<numbe
   const hostAlive = heartbeat !== undefined && isHeartbeatProcessAlive(heartbeat)
   const report = {
     schemaVersion: JSON_SCHEMA_VERSION,
-    package: 'dsh-qoder-connect',
+    package: 'dsh-connect-qoder-x',
     version: QODER_CONNECT_VERSION,
     node: process.version,
     provider: variant.id,
@@ -100,7 +100,7 @@ async function doctor(jsonOutput: boolean, variant: QoderVariant): Promise<numbe
     hints: [
       ...status.state === 'configured'
         ? []
-        : [`Save a token with \`dsh-qoder-connect pat set <token> --provider ${variant.id}\`, or from the plugin's settings card.`],
+        : [`Save a token with \`dsh-connect-qoder-x pat set <token> --provider ${variant.id}\`, or from the plugin's settings card.`],
       ...hostAlive ? [] : ['Host bundle not running in this DSH profile (or the process exited). The browser card is unavailable until DSH starts the plugin; the pat command above still works.'],
     ],
   }
@@ -127,7 +127,7 @@ async function status(jsonOutput: boolean, variant: QoderVariant): Promise<numbe
   const auth = await store.status()
   const base = {
     schemaVersion: JSON_SCHEMA_VERSION,
-    package: 'dsh-qoder-connect',
+    package: 'dsh-connect-qoder-x',
     version: QODER_CONNECT_VERSION,
     provider: variant.id,
     region: variant.region,
@@ -196,7 +196,7 @@ async function patSet(variant: QoderVariant, file: string | undefined, rest: rea
   // the plugin believes works. A refusal costs one discovery call, a bad save
   // costs every later request an opaque 401.
   if (!await validateApiKey(pat, variant.region)) {
-    process.stderr.write(`dsh-qoder-connect: the token was refused by ${variant.displayName} (${variant.region}). Nothing was saved.\n`)
+    process.stderr.write(`dsh-connect-qoder-x: the token was refused by ${variant.displayName} (${variant.region}). Nothing was saved.\n`)
     process.stderr.write('If this token belongs to the other Qoder product, use --provider for that one.\n')
     return 2
   }
@@ -252,7 +252,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const [rawAction, ...flags] = argv
   const actions: readonly Action[] = ['doctor', 'status', 'pat', 'logout', 'catalog']
   if (!actions.includes(rawAction as Action)) {
-    process.stderr.write(`dsh-qoder-connect: expected doctor, status, pat, logout, or catalog; got ${JSON.stringify(rawAction)}\n`)
+    process.stderr.write(`dsh-connect-qoder-x: expected doctor, status, pat, logout, or catalog; got ${JSON.stringify(rawAction)}\n`)
     return 1
   }
   const action = rawAction as Action
@@ -289,7 +289,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const variant = providerId === undefined ? CHINA_VARIANT : variantFor(providerId)
   if (variant === undefined) {
     process.stderr.write(
-      `dsh-qoder-connect: unknown provider ${JSON.stringify(providerId)}; expected one of ${QODER_VARIANTS.map(v => v.id).join(', ')}\n`,
+      `dsh-connect-qoder-x: unknown provider ${JSON.stringify(providerId)}; expected one of ${QODER_VARIANTS.map(v => v.id).join(', ')}\n`,
     )
     return 1
   }
@@ -301,7 +301,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     const sub = rest.shift()
     patCommand = sub === 'set' || sub === 'clear' ? sub : undefined
     if (patCommand === undefined) {
-      process.stderr.write(`dsh-qoder-connect: pat needs set or clear; got ${JSON.stringify(sub ?? '')}\n`)
+      process.stderr.write(`dsh-connect-qoder-x: pat needs set or clear; got ${JSON.stringify(sub ?? '')}\n`)
       return 1
     }
   }
@@ -309,17 +309,17 @@ export async function run(argv: readonly string[]): Promise<number> {
     const sub = rest.shift()
     catalogCommand = sub === 'refresh' ? sub : undefined
     if (catalogCommand === undefined) {
-      process.stderr.write(`dsh-qoder-connect: catalog needs refresh; got ${JSON.stringify(sub ?? '')}\n`)
+      process.stderr.write(`dsh-connect-qoder-x: catalog needs refresh; got ${JSON.stringify(sub ?? '')}\n`)
       return 1
     }
   }
   const unknown = rest.filter(flag => flag !== '--json' && !flag.startsWith('--'))
   if (unknown.length > 0 || (jsonOutput && action !== 'doctor' && action !== 'status')) {
-    process.stderr.write(`dsh-qoder-connect: invalid options for ${action}: ${flags.join(' ')}\n`)
+    process.stderr.write(`dsh-connect-qoder-x: invalid options for ${action}: ${flags.join(' ')}\n`)
     return 1
   }
   if (action !== 'pat' && file !== undefined) {
-    process.stderr.write(`dsh-qoder-connect: --file applies to pat set, not ${action}\n`)
+    process.stderr.write(`dsh-connect-qoder-x: --file applies to pat set, not ${action}\n`)
     return 1
   }
   try {
@@ -338,7 +338,7 @@ export async function run(argv: readonly string[]): Promise<number> {
         return await catalogRefresh(variant)
     }
   } catch (error: unknown) {
-    process.stderr.write(`dsh-qoder-connect: ${action} failed: ${safeMessage(error)}\n`)
+    process.stderr.write(`dsh-connect-qoder-x: ${action} failed: ${safeMessage(error)}\n`)
     return 1
   }
 }

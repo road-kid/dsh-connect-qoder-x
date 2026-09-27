@@ -22,7 +22,7 @@
  * WorkBuddy-era session/credit marker lists are gone with the upstream they
  * described.
  *
- * @module dsh-qoder-connect/upstream
+ * @module dsh-connect-qoder-x/upstream
  */
 
 import { randomBytes } from 'node:crypto'

@@ -17,7 +17,7 @@
 import type { QuotaSection, QuotaSettingsScope, QuotaSettingsSnapshot } from './QuotaSettingsCard.tsx'
 
 /** Base path of the host half's settings face. */
-const ROUTE_BASE = '/plugins/dsh-qoder-connect'
+const ROUTE_BASE = '/plugins/dsh-connect-qoder-x'
 
 /** The document the host's GET and POST answer with. */
 interface SettingsFaceDocument {
