@@ -627,6 +627,13 @@ export class QoderUpstreamClient {
   private readonly discovered = new Map<string, QoderCatalogModel>()
   /** Provenance of the last successful catalog fetch, for the status card. */
   lastCatalog: QoderCatalogFetch | undefined
+  /**
+   * The subscriber name from the last successful account read; undefined
+   * until one lands (or after it fails). `fetchCredits` runs on every status
+   * poll, so this tracks the credential the card is already displaying
+   * without a second upstream request.
+   */
+  accountName: string | undefined
 
   constructor(options: QoderUpstreamClientOptions) {
     this.region = options.region
@@ -684,6 +691,9 @@ export class QoderUpstreamClient {
    */
   async fetchCredits(signal?: AbortSignal): Promise<QoderCredits> {
     const account: QoderAccountInfo = await this.transport.readAccount({ force: true, ...signal === undefined ? {} : { signal } })
+    // Record WHO this billing answer belongs to; the name rides the next
+    // status document and the PAT box shows it beside the token tail.
+    this.accountName = account.profile.name === '' ? undefined : account.profile.name
     const usage: QoderQuotaUsage = account.usage ?? {}
     const accounts: QoderCreditAccount[] = []
     const personal = usage.userQuota

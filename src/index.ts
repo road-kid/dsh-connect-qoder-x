@@ -1579,6 +1579,7 @@ export function apply(ctx: Context, config: Config): void {
         path: runtime.variant.statusPath,
         store: runtime.store,
         client: runtime.client,
+        accountName: () => runtime.client.accountName,
         models: () => runtime.catalog.all(),
         catalog: () => catalogSection(runtime),
         probe: () => probeSection(runtime, current().probeConsent === true),

@@ -16,7 +16,7 @@ import { normalizeCredits } from './upstream.ts'
 import type { QoderModelInfo } from './catalog.ts'
 import { hostIsLoopback, originIsLoopback } from './loopback.ts'
 import { QODER_STATUS_PATH } from './status-paths.ts'
-import type { QoderCatalogModelSnapshot, QoderWebCatalog, QoderWebProbeSection, QoderWebStatus } from './status-paths.ts'
+import type { QoderCatalogModelSnapshot, QoderPatSummary, QoderWebCatalog, QoderWebProbeSection, QoderWebStatus } from './status-paths.ts'
 
 export { QODER_STATUS_PATH } from './status-paths.ts'
 export type { QoderWebStatus } from './status-paths.ts'
@@ -45,6 +45,8 @@ export interface QoderStatusRouteOptions {
    * authorize different powers; a signed-out card needs only this one.
    */
   authKey?: string
+  /** The subscriber name to show beside the PAT summary; optional. */
+  accountName?: () => string | undefined
   /** Card preference selecting larger declared context windows. */
   useMaximumContextWindow?: () => boolean
   /** Disabled models query for this variant. */
@@ -158,10 +160,22 @@ export async function qoderWebStatus(deps: QoderStatusRouteOptions): Promise<Qod
       ...deps.authKey === undefined ? {} : { authKey: deps.authKey },
     }
   }
+  const accountName = deps.accountName?.()
+  // The signed-in arm's pat summary, extended with the subscriber name when
+  // the upstream reported one. Typed against the arm's own field so the
+  // optional-spreading below stays exactOptionalPropertyTypes-clean.
+  const patSummary: QoderPatSummary | undefined = authStatus.pat === undefined && accountName === undefined
+    ? undefined
+    : {
+      source: authStatus.pat?.source ?? 'card',
+      ...authStatus.pat?.savedAtMs === undefined ? {} : { savedAtMs: authStatus.pat.savedAtMs },
+      ...authStatus.pat?.patTail === undefined ? {} : { patTail: authStatus.pat.patTail },
+      ...accountName === undefined ? {} : { accountName },
+    }
   const status: QoderWebStatus = {
     status: 'signed-in',
     ...authStatus.region === undefined ? {} : { region: authStatus.region },
-    ...authStatus.pat === undefined ? {} : { pat: authStatus.pat },
+    ...patSummary === undefined ? {} : { pat: patSummary },
     // Both arms carry the key: a signed-in card needs it to clear the token,
     // and omitting it here made that action unreachable.
     ...deps.authKey === undefined ? {} : { authKey: deps.authKey },
