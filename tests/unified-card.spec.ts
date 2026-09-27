@@ -132,8 +132,8 @@ describe('Unified Qoder Plugin Card', () => {
   it('renders the page body with no title, intro, or disclosure chrome of its own', async () => {
     await mountUnified()
     const json = JSON.stringify(view!.toJSON())
-    // The body still carries the real controls.
-    expect(json).toContain(en.accountHeading)
+    // The body still carries the real controls; the account heading is gone
+    // (the account box's state line replaced it).
     // But it draws no heading, no intro line, and no disclosure header. The
     // Plugins page supplies the title from the package manifest and its own
     // control is what opened this page; repeating any of that here would be a
@@ -143,13 +143,12 @@ describe('Unified Qoder Plugin Card', () => {
     // substrings — both occur throughout the body's own text — so this checks the
     // intro, which is unique, plus the structural absence of the disclosure.
     expect(json).not.toContain(en.unifiedIntro)
-    // No DISCLOSURE chrome around the whole body: the card never renders a
-    // header claiming the page is collapsed. The collapsible settings section
-    // owns an honest aria-expanded=false; the two bottom panes own aria-selected.
-    expect(view!.root.findAllByProps({ 'aria-expanded': false }).length).toBeGreaterThanOrEqual(1)
-    // One selected variant tab (China) + one selected pane (Usage).
-    expect(view!.root.findAllByProps({ 'aria-selected': true })).toHaveLength(2)
+    // No DISCLOSURE chrome anywhere: the settings fold is gone (flat on the
+    // pane) and no section claims the page is collapsed. The selected variant
+    // tab (China) + selected pane (Usage) are the only tab-state.
     expect(view!.root.findAllByProps({ 'aria-expanded': true })).toHaveLength(0)
+    expect(view!.root.findAllByProps({ 'aria-expanded': false })).toHaveLength(0)
+    expect(view!.root.findAllByProps({ 'aria-selected': true })).toHaveLength(2)
   })
 
   it('renders only the one-liner when the owner asks for the summary view', async () => {
@@ -172,7 +171,7 @@ describe('Unified Qoder Plugin Card', () => {
     expect(json).not.toContain(en.quotaPollLabel)
   })
 
-  it('opens on the account with the variant tabs and folds the settings last', async () => {
+  it('opens on the account with the variant tabs; settings sit flat below', async () => {
     await mountUnified()
     const json = JSON.stringify(view!.toJSON())
     // Variant tabs stay the ONE level of tabs
@@ -180,14 +179,11 @@ describe('Unified Qoder Plugin Card', () => {
     expect(json).toContain(en.variantTabGlobal)
     // Default active is CN (signed-in in our mock)
     expect(json).toContain(t('patTail', { tail: '****1111' }))
-    // The settings section exists but starts FOLDED — its toggles are absent
-    // until the header is clicked, so the page opens on the account.
-    expect(json).not.toContain(en.quotaToggleCN)
-    await expandSection(en.quotaSettingsHeading)
-    const expanded = JSON.stringify(view!.toJSON())
-    expect(expanded).toContain(en.quotaToggleCN)
-    expect(expanded).toContain(en.quotaToggleGlobal)
-    expect(expanded).toContain(en.quotaPollLabel)
+    // Settings render FLAT (no fold to open) and SCOPED to the active
+    // variant: the CN tab shows CN rows only.
+    expect(json).toContain(en.quotaToggleCN)
+    expect(json).toContain(en.quotaPollLabel)
+    expect(json).not.toContain(en.quotaToggleGlobal)
   })
 
   it('switches between China and Global tabs when clicked', async () => {
@@ -280,12 +276,10 @@ describe('Unified Qoder Plugin Card', () => {
       view = create(createElement(QoderPluginCard, props))
     })
 
-    // Open the settings section: its toggles are folded on mount.
-    await expandSection(en.quotaSettingsHeading)
-
+    // Settings sit flat on the Usage pane, scoped to the CN variant.
     // Find the toggle switches: first one is China quota toggle
     const switches = view!.root.findAll(n => n.props.role === 'switch')
-    expect(switches.length).toBeGreaterThanOrEqual(2)
+    expect(switches.length).toBeGreaterThanOrEqual(1)
     const cnSwitch = switches[0]!
     // Initially disabled because cn is signed out
     expect(cnSwitch.props.disabled).toBe(true)
@@ -340,20 +334,18 @@ describe('Unified Qoder Plugin Card', () => {
     const headerBtn = view!.root.findAllByType('button')[0]!
     await act(async () => { headerBtn.props.onClick() })
 
-    // (a) Verify switches are disabled when not signed in
-    // The settings section starts folded; open it to reach the switches.
-    await expandSection(en.quotaSettingsHeading)
+    // (a) Verify switches are disabled when not signed in (CN-scoped rows).
     const switches = view!.root.findAll(n => n.props.role === 'switch')
-    expect(switches.length).toBeGreaterThanOrEqual(2)
-    const [cnSwitch, globalSwitch] = switches
+    expect(switches.length).toBeGreaterThanOrEqual(1)
+    const [cnSwitch] = switches
     expect(cnSwitch!.props.disabled).toBe(true)
-    expect(globalSwitch!.props.disabled).toBe(true)
 
     // (b) Simulate clicking switches in disabled state; verify scope.set is NEVER triggered
     await act(async () => {
       cnSwitch!.props.onClick()
-      globalSwitch!.props.onClick()
     })
+    // The Global rows are not rendered on the CN-scoped pane; there is no
+    // globalSwitch to click, and the CN switch is disabled anyway.
     expect(mockSet).not.toHaveBeenCalled()
   })
 

@@ -256,7 +256,11 @@ describe('QoderPluginCard', () => {
       expect(tree).not.toContain(en.signedOut)
       const live = view!.root.findAll(node => (node.props as { role?: string }).role === 'status')[0]
       expect(live!.props['aria-busy']).toBe(true)
-      await release(0, { ok: true, body: doc() })
+      // Child effects (the settings probe) start before the card's own read,
+      // so the status read is not necessarily index 0. Resolve EVERY held
+      // read with the same document: the sequence guard keeps the card's own
+      // (latest) read in charge.
+      for (const index of [...hung.keys()]) await release(index, { ok: true, body: doc() })
       expect(JSON.stringify(view!.toJSON())).toContain(en.signedIn)
     })
   })
@@ -266,14 +270,17 @@ describe('QoderPluginCard', () => {
       // Read #1 (mount) settles; read #2 (manual refresh) is held; read #3
       // (poll) settles first with a newer answer; releasing #2 must not roll
       // the card back to its older document.
-      plan = (_url, _init, index) => index === 1 ? { hang: true } : { ok: true, body: doc({
-        credits: { total: index === 2 ? 7 : 77, accounts: [] },
+      // Reads start: 0 = the settings probe (child effect), 1 = the card's
+      // mount read, 2 = the manual refresh, 3 = the poll. The refresh is the
+      // read the sequence guard must keep superseded.
+      plan = (_url, init, index) => (index === 2 && init?.method === undefined) ? { hang: true } : { ok: true, body: doc({
+        credits: { total: index === 3 ? 7 : 77, accounts: [] },
       }) }
       await mountCard()
-      await pressCard(en.refresh) // read #2, held
-      await act(async () => { [...intervals.values()][0]!() }) // read #3, lands first
+      await pressCard(en.refresh) // refresh read, held
+      await act(async () => { [...intervals.values()][0]!() }) // poll lands first
       expect(JSON.stringify(view!.toJSON())).toContain(t('creditsUsed', { percent: '7' }))
-      await release(1, { ok: true, body: doc({ credits: { total: 77, accounts: [] } }) })
+      await release(2, { ok: true, body: doc({ credits: { total: 77, accounts: [] } }) })
       expect(JSON.stringify(view!.toJSON())).toContain(t('creditsUsed', { percent: '7' }))
     })
 

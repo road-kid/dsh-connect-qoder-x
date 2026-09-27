@@ -358,7 +358,7 @@ function TimeRow({ label, hint, value, disabled, onPick }: {
 }
 
 /** The inner controls for sidebar quota settings. */
-export function QuotaSettingsContent({ t = key => key, scope, signedIn }: QuotaSettingsCardInjected): React.ReactNode {
+export function QuotaSettingsContent({ t = key => key, scope, signedIn, variant }: QuotaSettingsCardInjected & { variant?: 'cn' | 'global' }): React.ReactNode {
   const subscribe = useCallback((onStoreChange: () => void) => {
     return scope?.subscribe(onStoreChange) ?? (() => {})
   }, [scope])
@@ -385,7 +385,14 @@ export function QuotaSettingsContent({ t = key => key, scope, signedIn }: QuotaS
       }
     }
     void (async () => {
-      const [cn, global] = await Promise.all([probeOne(QODER_STATUS_PATH), probeOne(QODER_GLOBAL_STATUS_PATH)])
+      // Probe only the side(s) this render owns: a variant-scoped pane must
+      // not read the other variant's route just to learn sign-in state it
+      // cannot act on (and a per-variant card must not cross routes at all).
+      const [cn, global] = variant === 'cn'
+        ? [await probeOne(QODER_STATUS_PATH), undefined]
+        : variant === 'global'
+          ? [undefined, await probeOne(QODER_GLOBAL_STATUS_PATH)]
+          : await Promise.all([probeOne(QODER_STATUS_PATH), probeOne(QODER_GLOBAL_STATUS_PATH)])
       if (!disposed) setProbe({ cn: cn === true, global: global === true })
     })()
     return () => {
@@ -435,54 +442,71 @@ export function QuotaSettingsContent({ t = key => key, scope, signedIn }: QuotaS
     void scope?.set(field, value)
   }
   const minutes = Math.max(POLL_MIN_MS / 60_000, Math.round(projection.values.quotaPollMs / 60_000))
+  // Variant scoping: a pane-bound render asks for one side's rows only, so
+  // the CN tab never shows the Global auto-check-in controls (and vice versa).
+  // Undefined keeps the legacy both-variants list for the standalone card.
+  const showCN = variant === undefined || variant === 'cn'
+  const showGlobal = variant === undefined || variant === 'global'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <ToggleRow
-        label={t('quotaToggleCN')}
-        hint={t('quotaToggleHint')}
-        checked={projection.values.sidebarQuotaCN}
-        disabled={!signed.cn}
-        disabledHint={t('quotaSignInRequired')}
-        onToggle={next => write('sidebarQuotaCN', next)}
-      />
-      <ToggleRow
-        label={t('quotaToggleGlobal')}
-        hint={t('quotaToggleHint')}
-        checked={projection.values.sidebarQuotaGlobal}
-        disabled={!signed.global}
-        disabledHint={t('quotaSignInRequired')}
-        onToggle={next => write('sidebarQuotaGlobal', next)}
-      />
-      <ToggleRow
-        label={t('autoCheckInCN')}
-        hint={t('autoCheckInHintCN')}
-        checked={projection.values.autoCheckInCN}
-        disabled={!signed.cn}
-        disabledHint={t('quotaSignInRequired')}
-        onToggle={next => write('autoCheckInCN', next)}
-      />
-      <TimeRow
-        label={t('checkInTimeCN')}
-        hint={t('checkInTimeHint')}
-        value={projection.values.checkInMinuteCN}
-        disabled={!signed.cn}
-        onPick={next => write('checkInMinuteCN', next)}
-      />
-      <ToggleRow
-        label={t('autoCheckInGlobal')}
-        hint={t('autoCheckInHintGlobal')}
-        checked={projection.values.autoCheckInGlobal}
-        disabled={!signed.global}
-        disabledHint={t('quotaSignInRequired')}
-        onToggle={next => write('autoCheckInGlobal', next)}
-      />
-      <TimeRow
-        label={t('checkInTimeGlobal')}
-        hint={t('checkInTimeHint')}
-        value={projection.values.checkInMinuteGlobal}
-        disabled={!signed.global}
-        onPick={next => write('checkInMinuteGlobal', next)}
-      />
+      {showCN ? (
+        <ToggleRow
+          label={t('quotaToggleCN')}
+          hint={t('quotaToggleHint')}
+          checked={projection.values.sidebarQuotaCN}
+          disabled={!signed.cn}
+          disabledHint={t('quotaSignInRequired')}
+          onToggle={next => write('sidebarQuotaCN', next)}
+        />
+      ) : null}
+      {showGlobal ? (
+        <ToggleRow
+          label={t('quotaToggleGlobal')}
+          hint={t('quotaToggleHint')}
+          checked={projection.values.sidebarQuotaGlobal}
+          disabled={!signed.global}
+          disabledHint={t('quotaSignInRequired')}
+          onToggle={next => write('sidebarQuotaGlobal', next)}
+        />
+      ) : null}
+      {showCN ? (
+        <ToggleRow
+          label={t('autoCheckInCN')}
+          hint={t('autoCheckInHintCN')}
+          checked={projection.values.autoCheckInCN}
+          disabled={!signed.cn}
+          disabledHint={t('quotaSignInRequired')}
+          onToggle={next => write('autoCheckInCN', next)}
+        />
+      ) : null}
+      {showCN ? (
+        <TimeRow
+          label={t('checkInTimeCN')}
+          hint={t('checkInTimeHint')}
+          value={projection.values.checkInMinuteCN}
+          disabled={!signed.cn}
+          onPick={next => write('checkInMinuteCN', next)}
+        />
+      ) : null}
+      {showGlobal ? (
+        <ToggleRow
+          label={t('autoCheckInGlobal')}
+          hint={t('autoCheckInHintGlobal')}
+          checked={projection.values.autoCheckInGlobal}
+          disabled={!signed.global}
+          disabledHint={t('quotaSignInRequired')}
+          onToggle={next => write('autoCheckInGlobal', next)}
+        />
+      ) : null}
+      {showGlobal ? (
+        <TimeRow
+          label={t('checkInTimeGlobal')}
+          hint={t('checkInTimeHint')}
+          value={projection.values.checkInMinuteGlobal}
+          disabled={!signed.global}
+          onPick={next => write('checkInMinuteGlobal', next)}
+        />
+      ) : null}
       <div style={{ ...rowStyle, borderBottom: 'none', paddingBottom: 0 }}>
         <div style={rowTextStyle}>
           <span style={labelStyle}>{t('quotaPollLabel')}</span>

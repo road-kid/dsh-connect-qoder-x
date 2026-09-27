@@ -315,19 +315,10 @@ describe('plugin card per variant', () => {
     expect(posts(QODER_AUTH_PATH)).toHaveLength(0)
   })
 
-  it('replaces and clears the stored PAT from the signed-in arm', async () => {    await mount()
-    // 「更换 PAT」 opens the entry over a signed-in document (no sign-out first).
-    await press(en.patReplace)
-    expect(patInputs()).toHaveLength(1)
-    await typePat('a-brand-new-pat')
-    await press(en.patSave)
-    await act(async () => { for (const release of pendingAuth.splice(0)) release() })
-    expect(posts(QODER_AUTH_PATH)).toEqual([{ action: 'save-pat', pat: 'a-brand-new-pat' }])
-
-    // The destructive clear now confirms inline before it posts: the arming
-    // press sends nothing NEW (the save above is still the only POST).
-    await press(en.patClear)
-    expect(posts(QODER_AUTH_PATH)).toEqual([{ action: 'save-pat', pat: 'a-brand-new-pat' }])
+  it('removes the stored PAT from the signed-in arm after confirming', async () => {    await mount()
+    // The destructive remove confirms inline before it posts.
+    await press(en.patRemove)
+    expect(posts(QODER_AUTH_PATH)).toEqual([])
     await press(en.patClearConfirmYes)
     await act(async () => { for (const release of pendingAuth.splice(0)) release() })
     expect(posts(QODER_AUTH_PATH)).toContainEqual({ action: 'clear' })

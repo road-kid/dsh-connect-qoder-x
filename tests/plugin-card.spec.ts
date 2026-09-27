@@ -183,7 +183,7 @@ describe('Qoder plugin card', () => {
     signedIn()
     await releasePosts({ ok: true, status: 'saved' })
     expect(inputs()).toHaveLength(0)
-    expect(buttonLabels()).toContain(en.patReplace)
+    expect(buttonLabels()).toContain(en.patRemove)
   })
 
   it('renders the stable refusal codes as the re-generate prompt, not raw wire text', async () => {
@@ -230,16 +230,19 @@ describe('Qoder plugin card', () => {
     expect(tree).toContain(t('patTail', { tail: '****abcd' }))
     expect(tree).toContain(en.patSourceCard)
     expect(tree).not.toContain('pt-test')
-    expect(buttonLabels()).toContain(en.patReplace)
-    expect(buttonLabels()).toContain(en.patClear)
+    // The PAT box carries the delete action; 「更换」 is gone — removing the
+    // token and saving a fresh one IS the replace flow now.
+    expect(buttonLabels()).toContain(en.patRemove)
+    expect(buttonLabels()).not.toContain(en.patReplace)
   })
 
-  it('Replace PAT opens a cancellable entry over the live document', async () => {
+  it('Remove PAT arms a cancellable confirm over the live document', async () => {
     await mount()
-    await press(en.patReplace)
-    expect(inputs()).toHaveLength(1)
+    await press(en.patRemove)
+    // The confirm row replaces the PAT box; cancel returns to it.
+    expect(buttonLabels()).toContain(en.patClearConfirmYes)
     await press(en.cancel)
-    expect(inputs()).toHaveLength(0)
+    expect(buttonLabels()).toContain(en.patRemove)
     // Canceling never touches the route: the stored PAT is still in effect.
     expect(posts).toEqual([])
   })
@@ -248,7 +251,7 @@ describe('Qoder plugin card', () => {
     holdPosts = true
     await mount()
     // First press only ARMS the confirm — nothing is sent yet.
-    await press(en.patClear)
+    await press(en.patRemove)
     expect(posts).toHaveLength(0)
     expect(buttonLabels()).toContain(en.patClearConfirmYes)
     expect(buttonLabels()).toContain(en.cancel)
@@ -276,30 +279,7 @@ describe('Qoder plugin card', () => {
 
   // ---- context tab: maximum-window preference -------------------------------
 
-  it('offers the max-window preference on both cards, each a route write', async () => {
-    statusBody = {
-      status: 'signed-in',
-      probeKey: 'test-probe-key',
-      authKey: 'test-auth-key',
-      models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
-    }
-    for (const variant of [undefined, QODER_GLOBAL_CARD]) {
-      await mount(variant)
-      // The preference lives in the Models pane.
-      await openPane(en.paneModels)
-      const checkbox = inputs().find(input => input.props.type === 'checkbox')
-      expect(checkbox).toBeDefined()
-      await act(async () => { checkbox!.props.onChange({ currentTarget: { checked: true } }) })
-      expect(posts).toHaveLength(1)
-      expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-maximum-context-window', enabled: true })
-      await act(async () => view?.unmount())
-      posts.length = 0
-    }
-    // Each card's write went to its own variant's probe route.
-    expect(true).toBe(true)
-  })
-
-  it('keeps the context rows a read-only report on one line', async () => {
+  it('offers the per-model window chooser on the Models pane, a route write', async () => {
     statusBody = {
       status: 'signed-in',
       probeKey: 'test-probe-key',
@@ -308,10 +288,28 @@ describe('Qoder plugin card', () => {
     }
     await mount()
     await openPane(en.paneModels)
-    expect(view!.root.findAllByType('select')).toHaveLength(0)
-    const tree = JSON.stringify(view!.toJSON())
-    expect(tree).toContain('200K')
-    expect(tree).toContain(t('contextUpTo', { size: '1M' }))
+    const select = view!.root.findAllByType('select')[0]
+    expect(select).toBeDefined()
+    expect(select!.props.value).toBe('200000')
+    await act(async () => { select!.props.onChange({ currentTarget: { value: '1000000' } }) })
+    expect(posts).toHaveLength(1)
+    expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-model-context-window', model: 'm1', window: 1_000_000 })
+  })
+
+  it('states each declared window as its own chooser option', async () => {
+    statusBody = {
+      status: 'signed-in',
+      probeKey: 'test-probe-key',
+      authKey: 'test-auth-key',
+      models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
+    }
+    await mount()
+    await openPane(en.paneModels)
+    const select = view!.root.findAllByType('select')[0]
+    expect(select).toBeDefined()
+    const options = (select!.children as unknown as { props: { value?: string; children?: string } }[])
+      .map(node => `${node.props.value ?? ''}:${node.props.children ?? ''}`)
+    expect(options).toEqual(['1000000:1M', '200000:200K'])
   })
 
   // ---- tabbed body -----------------------------------------------------------
@@ -340,14 +338,14 @@ describe('Qoder plugin card', () => {
     expect(tree).toContain(t('exactRemaining', { remain: '75', size: '100' }))
     expect(tree).not.toContain('组织资源包')
     expect(tree).toContain(en.unlimitedQuota)
-    // The Models pane carries context capacities beside the visibility toggles.
+    // The Models pane carries the per-model chooser beside the toggles.
     await openPane(en.paneModels)
     tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain('200K')
-    expect(tree).toContain(t('contextUpTo', { size: '1M' }))
+    expect(view!.root.findAllByType('select')).toHaveLength(1)
   })
 
-  it('offers the max-window preference on the Global card, as a route write', async () => {
+  it('offers the per-model window chooser on the Global card, a route write', async () => {
     statusBody = {
       status: 'signed-in',
       probeKey: 'test-probe-key',
@@ -356,12 +354,12 @@ describe('Qoder plugin card', () => {
     }
     await mount(QODER_GLOBAL_CARD)
     await openPane(en.paneModels)
-    const checkbox = inputs().find(input => input.props.type === 'checkbox')
-    expect(checkbox).toBeDefined()
-    await act(async () => { checkbox!.props.onChange({ currentTarget: { checked: true } }) })
+    const select = view!.root.findAllByType('select')[0]
+    expect(select).toBeDefined()
+    await act(async () => { select!.props.onChange({ currentTarget: { value: '1000000' } }) })
     expect(posts).toHaveLength(1)
     expect(posts[0]!.url).toBe(QODER_GLOBAL_CARD.probePath)
-    expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-maximum-context-window', enabled: true })
+    expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-model-context-window', model: 'm1', window: 1_000_000 })
   })
 
   // ---- read failures ----------------------------------------------------------

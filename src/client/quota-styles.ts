@@ -239,6 +239,28 @@ export const QUOTA_CSS = `
    states its own context capacity beside the enable toggle. */
 .qdp-modelHead{align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;display:flex}
 .qdp-modelMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;white-space:nowrap}
+/* Per-model context picker: a compact select like workbuddy's account
+   picker, sharing the select-wrap caret pattern. */
+.qdp-modelSelect{appearance:none;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-3);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:3px 22px 3px 8px;cursor:pointer}
+.qdp-modelSelect:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.qdp-modelSelect:disabled{opacity:.5;cursor:default}
+/* Variant tabs with an enable checkbox per side (workbuddy tab-switch). */
+.qdp-segCell{align-items:center;gap:2px;flex:1;min-width:0;display:flex}
+.qdp-segSwitch{display:inline-flex;align-items:center;flex:none;padding:0 8px 0 2px;cursor:pointer}
+.qdp-segSwitch input{margin:0;cursor:pointer;accent-color:var(--dsw-alias-brand-primary)}
+.qdp-segSwitch input:disabled{opacity:.4;cursor:default}
+.qdp-segOff{opacity:.55}
+/* Account box + PAT box (workbuddy usage-account shape). */
+.qdp-accountBox{align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-2);padding:12px 14px;display:flex}
+.qdp-accountState{align-items:center;gap:10px;font-size:15px;font-weight:500;color:var(--dsw-alias-label-primary);display:flex}
+.qdp-accountExpiry{padding-left:19px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
+.qdp-patBox{align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-3);padding:8px 12px;display:flex}
+.qdp-patBoxCopy{flex-direction:column;gap:1px;min-width:0;display:flex}
+.qdp-patBoxName{color:var(--dsw-alias-label-primary);font-size:12px;line-height:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qdp-patBoxMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}
+/* Settings listed flat on the Usage pane: no fold, just grouped rows. */
+.qdp-settingsFlat{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px;gap:4px;display:flex;flex-direction:column}
+.qdp-settingsTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
 
 @media (prefers-reduced-motion:reduce){.qdp-footFill,.qdp-barFill{transition:none}}
 `

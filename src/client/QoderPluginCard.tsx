@@ -417,30 +417,21 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
  * 一个复选框的「上下文」tab + 一个纯开关列表),刷新模型按钮挪进本栏头部
  * (原先孤悬在账号行上)。max-window 偏好置于列表上方。
  */
-function ModelsPane({ models, disabledModels = [], useMaximumContextWindow, catalog, t, busy, onUseMaximumContextWindow, onSetModelsEnabled, onRefreshModels }: {
+function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelContextWindow, onSetModelsEnabled, onRefreshModels }: {
   models: readonly QoderCatalogModelSnapshot[] | undefined
   disabledModels?: readonly string[] | undefined
-  useMaximumContextWindow?: boolean | undefined
   catalog?: QoderWebCatalog | undefined
   t: QoderPluginCardInjected['t']
   busy?: boolean
-  onUseMaximumContextWindow?: (enabled: boolean) => void
+  onSetModelContextWindow: (model: string, window: number) => void
   onSetModelsEnabled: (models: readonly string[], enabled: boolean) => void
   onRefreshModels: () => void
 }): React.ReactNode {
-  const list = models ?? []
-  const known = list
-    .filter(model => model.contextWindow !== undefined)
-    .sort((a, b) => (b.contextWindow as number) - (a.contextWindow as number))
-  const canSelectMaximum = known.some(model => {
-    const max = maxDeclaredWindow(model)
-    return max !== undefined && max > (model.defaultContextWindow ?? model.contextWindow ?? 0)
-  })
-  const showPreference = onUseMaximumContextWindow !== undefined && (canSelectMaximum || useMaximumContextWindow === true)
+  const list = [...(models ?? [])].sort((a, b) => (b.contextWindow ?? 0) - (a.contextWindow ?? 0))
   return (
     <div className="qdp-list">
       <div className="qdp-modelHead">
-        <h3 className="qdp-panelTitle">{t('modelsMergedHeading')}</h3>
+        <h3 className="qdp-panelTitle">{t('tabModels')}</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {catalog === undefined ? null : (
             <span className="qdp-modelMeta">
@@ -456,22 +447,7 @@ function ModelsPane({ models, disabledModels = [], useMaximumContextWindow, cata
           </button>
         </div>
       </div>
-      <p className="qdp-body">{t('modelsMergedHint')}</p>
       {catalog?.error === undefined ? null : <p className="qdp-error">{t('catalogError', { message: catalog.error })}</p>}
-      {showPreference && onUseMaximumContextWindow !== undefined ? (
-        <label className="qdp-contextPref">
-          <input
-            type="checkbox"
-            checked={useMaximumContextWindow === true}
-            disabled={busy}
-            onChange={event => { onUseMaximumContextWindow(event.currentTarget.checked) }}
-          />
-          <span className="qdp-contextPrefCopy">
-            <span>{t('useMaximumContextWindow')}</span>
-            <span className="qdp-rate">{t('useMaximumContextWindowHint')}</span>
-          </span>
-        </label>
-      ) : null}
       {list.length === 0 ? (
         <p className="qdp-body">{t('modelsNoModels')}</p>
       ) : (
@@ -479,8 +455,11 @@ function ModelsPane({ models, disabledModels = [], useMaximumContextWindow, cata
           {list.map(model => {
             const isModelEnabled = !disabledModels.includes(model.id)
             const capacity = model.contextWindow
-            const max = maxDeclaredWindow(model)
-            const alternative = capacity !== undefined && max !== undefined && max > capacity ? max : undefined
+            // The chooser offers exactly the windows the upstream declared
+            // for this model; nothing is invented. The effective window (an
+            // override, or the default) is the selected value.
+            const declared = [...new Set(model.supportedContextWindows ?? (capacity !== undefined ? [capacity] : []))].sort((a, b) => b - a)
+            const effective = capacity ?? model.defaultContextWindow
             return (
               <div
                 key={model.id}
@@ -500,12 +479,24 @@ function ModelsPane({ models, disabledModels = [], useMaximumContextWindow, cata
                   </span>
                 </label>
                 <span className="qdp-contextPicker">
-                  {capacity !== undefined ? <span className="qdp-modelMeta">{formatTokens(capacity)}</span> : null}
-                  {alternative !== undefined
-                    ? <span className="qdp-rate">{t('contextUpTo', { size: formatTokens(alternative) })}</span>
-                    : model.defaultContextWindow !== undefined && capacity !== undefined && model.defaultContextWindow < capacity
-                      ? <span className="qdp-rate">{t('contextDefault', { size: formatTokens(model.defaultContextWindow) })}</span>
-                      : null}
+                  {declared.length > 0 ? (
+                    <select
+                      className="qdp-modelSelect"
+                      value={effective !== undefined && declared.includes(effective) ? String(effective) : ''}
+                      disabled={busy}
+                      aria-label={`${model.name} ${t('contextHeading')}`}
+                      onChange={event => { onSetModelContextWindow(model.id, Number(event.currentTarget.value)) }}
+                    >
+                      {effective !== undefined && !declared.includes(effective)
+                        ? <option value="">{formatTokens(effective)}</option>
+                        : null}
+                      {declared.map(choice => (
+                        <option key={choice} value={choice}>{formatTokens(choice)}</option>
+                      ))}
+                    </select>
+                  ) : capacity !== undefined ? (
+                    <span className="qdp-modelMeta">{formatTokens(capacity)}</span>
+                  ) : null}
                 </span>
               </div>
             )
@@ -715,6 +706,14 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   const [confirmingClear, setConfirmingClear] = useState(false)
   /** 底部双栏 tab:「用量与签到」(默认) / 「模型」。 */
   const [pane, setPane] = useState<'usage' | 'models'>('usage')
+  /**
+   * 每个 variant 的启用勾选(workbuddy 的 tab-switch)。这是客户端意图层:
+   * 关掉的 variant 不再轮询/显示其内容;模型通道的开关仍由 disabledModels
+   * 决定,这里不写宿主配置。
+   */
+  const [variantEnabled, setVariantEnabled] = useState<{ cn: boolean; global: boolean }>({ cn: true, global: true })
+  const cnEnabled = variantEnabled.cn
+  const globalEnabled = variantEnabled.global
   const mounted = useRef(true)
   const readSeq = useRef(0)
   const manualControllers = useRef(new Set<AbortController>())
@@ -1139,6 +1138,12 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
         ? t('requestFailed')
         : t('signedOut')
 
+  /* The account box's state line: with a known subscriber name it reads
+     「已登录：name」; without one it is the plain signed-in copy. */
+  const signedInLabel = status?.status === 'signed-in' && status.pat?.accountName !== undefined
+    ? t('accountSignedInAs', { name: status.pat.accountName })
+    : label
+
   const patSummaryLine = (pat: NonNullable<Extract<QoderWebStatus, { status: 'signed-in' }>['pat']>): React.ReactNode => {
     const parts = [
       patSourceText(pat.source, t),
@@ -1178,74 +1183,109 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 surface; nothing nests inside it (was: these tabs wrapping a
                 second 5-tab strip). */}
             <div className="qdp-seg" role="tablist" aria-label="Qoder Version Selection">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeVariantId === 'qoder'}
-                className={activeVariantId === 'qoder' ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
-                onClick={() => setActiveVariantId('qoder')}
-              >
-                <span style={dotStyle(cnDotStatus)} aria-hidden="true" />
-                <span>{t('variantTabCN')}</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeVariantId === 'qoder-global'}
-                className={activeVariantId === 'qoder-global' ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
-                onClick={() => setActiveVariantId('qoder-global')}
-              >
-                <span style={dotStyle(globalDotStatus)} aria-hidden="true" />
-                <span>{t('variantTabGlobal')}</span>
-              </button>
+              <span className="qdp-segCell">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeVariantId === 'qoder'}
+                  className={cnEnabled && activeVariantId === 'qoder' ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
+                  onClick={() => setActiveVariantId('qoder')}
+                >
+                  <span style={dotStyle(cnDotStatus)} aria-hidden="true" />
+                  <span>{t('variantTabCN')}</span>
+                </button>
+                {/*
+                 * workbuddy's per-tab switch: the checkbox decides whether
+                 * THIS side is enabled at all — an off side still shows its
+                 * tab (to explain why it is quiet) but reads disabled.
+                 */}
+                <label className="qdp-segSwitch" title={t('variantEnable')}>
+                  <input
+                    type="checkbox"
+                    checked={cnEnabled}
+                    onChange={event => { setVariantEnabled(prev => ({ ...prev, cn: event.currentTarget.checked })) }}
+                  />
+                </label>
+              </span>
+              <span className="qdp-segCell">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeVariantId === 'qoder-global'}
+                  className={globalEnabled && activeVariantId === 'qoder-global' ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
+                  onClick={() => setActiveVariantId('qoder-global')}
+                >
+                  <span style={dotStyle(globalDotStatus)} aria-hidden="true" />
+                  <span>{t('variantTabGlobal')}</span>
+                </button>
+                <label className="qdp-segSwitch" title={t('variantEnable')}>
+                  <input
+                    type="checkbox"
+                    checked={globalEnabled}
+                    onChange={event => { setVariantEnabled(prev => ({ ...prev, global: event.currentTarget.checked })) }}
+                  />
+                </label>
+              </span>
             </div>
           </>
         ) : null}
 
-          <h3 className="qdp-h3">{t('accountHeading')}</h3>
-          <div className="qdp-row">
-            <div className="qdp-status" role="status" aria-busy={status === undefined}>
-              <span aria-hidden="true" style={dotStyle(status === undefined ? 'loading' : status.status)} />
-              <span>{label}</span>
+          {/*
+           * The account box (workbuddy's usage-account): signed-in line and
+           * its provenance copy on the left, refresh right-aligned inside.
+           * Credential management lives in the PAT box BELOW it — the token's
+           * identity (account · tail) with a delete action; saving a new
+           * token after a delete is the replace flow, so no separate
+           * 「更换」 button is needed.
+           */}
+          <div className="qdp-accountBox">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+              <div className="qdp-accountState" role="status" aria-busy={status === undefined}>
+                <span aria-hidden="true" style={dotStyle(status === undefined ? 'loading' : status.status)} />
+                <span>{signedInLabel}</span>
+              </div>
+              {status?.status !== 'signed-in' || status.pat === undefined ? null : (
+                <span className="qdp-accountExpiry">
+                  {[patSourceText(status.pat.source, t),
+                    status.pat.savedAtMs === undefined ? null : t('patSavedAt', { time: formatTime(status.pat.savedAtMs) }),
+                    status.pat.patTail === undefined ? null : t('patTail', { tail: `****${status.pat.patTail}` })].filter(Boolean).join(' · ')}
+                </span>
+              )}
             </div>
             <button type="button" className="qdp-btn" disabled={busy} onClick={() => { void manualRefresh() }}>
               {busy ? t('refreshing') : t('refresh')}
             </button>
-            {status?.status !== 'signed-in' || status.authKey === undefined
-              ? null
-              : <>
-                  <button type="button" className="qdp-btn qdp-btnPrimary" disabled={busy || patBusy} onClick={beginReplace}>
-                    {t('patReplace')}
-                  </button>
-                  {/*
-                   * Clearing the PAT is the one destructive action on this
-                   * row: it renders in the danger tone and demands an inline
-                   * confirm, instead of sitting next to 「更换」 at the same
-                   * visual weight (was: three equally-weighted buttons, one
-                   * of which could drop the working credential on a slip).
-                   */}
-                  {confirmingClear
-                    ? <>
-                        <span className="qdp-rate">{t('patClearConfirm')}</span>
-                        <button type="button" className="qdp-btn qdp-btnDanger" disabled={busy || patBusy} onClick={() => { void clearPat() }}>
-                          {patBusy ? t('patClearing') : t('patClearConfirmYes')}
-                        </button>
-                        <button type="button" className="qdp-btn" disabled={patBusy} onClick={() => { setConfirmingClear(false) }}>
-                          {t('cancel')}
-                        </button>
-                      </>
-                    : <button type="button" className="qdp-btn qdp-btnDangerQuiet" disabled={busy || patBusy} onClick={() => { setConfirmingClear(true) }}>
-                        {t('patClear')}
-                      </button>}
-                </>
-            }
           </div>
+          {status?.status !== 'signed-in' || status.pat === undefined
+            ? null
+            : confirmingClear
+              ? <div className="qdp-patBox">
+                  <span className="qdp-rate">{t('patClearConfirm')}</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" className="qdp-btn qdp-btnDanger" disabled={busy || patBusy} onClick={() => { void clearPat() }}>
+                      {patBusy ? t('patClearing') : t('patClearConfirmYes')}
+                    </button>
+                    <button type="button" className="qdp-btn" disabled={patBusy} onClick={() => { setConfirmingClear(false) }}>
+                      {t('cancel')}
+                    </button>
+                  </div>
+                </div>
+              : <div className="qdp-patBox">
+                  <div className="qdp-patBoxCopy">
+                    <span className="qdp-patBoxName">{status.pat.accountName ?? t('patBoxLabel')}</span>
+                    <span className="qdp-patBoxMeta">
+                      {status.pat.patTail === undefined ? '' : t('patTail', { tail: `****${status.pat.patTail}` })}
+                    </span>
+                  </div>
+                  <button type="button" className="qdp-btn qdp-btnDangerQuiet" disabled={busy || patBusy} onClick={() => { setConfirmingClear(true) }}>
+                    {t('patRemove')}
+                  </button>
+                </div>}
           {readFailure === undefined || signedInState === undefined
             ? null
             : <p className="qdp-error">{t('statusRefreshFailed', { message: readFailure })}</p>}
           {status?.status === 'signed-in'
             ? <>
-                {status.pat === undefined ? null : patSummaryLine(status.pat)}
                 {replacing ? patEntry() : null}
                 {status.jobTokenRefreshedAt === undefined
                   ? null
@@ -1297,11 +1337,12 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                   <ModelsPane
                     models={status.models}
                     disabledModels={status.disabledModels}
-                    useMaximumContextWindow={status.useMaximumContextWindow}
                     catalog={status.catalog}
                     t={t}
                     busy={busy}
-                    onUseMaximumContextWindow={(enabled: boolean) => { void control({ action: 'set-maximum-context-window', enabled }) }}
+                    onSetModelContextWindow={(model, window) => {
+                      void control({ action: 'set-model-context-window', model, window })
+                    }}
                     onSetModelsEnabled={(models, enabled) => {
                       void control({ action: 'set-models-enabled', models, enabled })
                     }}
@@ -1320,13 +1361,21 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
             : null}
           {status?.status === 'error' ? <p className="qdp-error">{status.message}</p> : null}
           {/*
-           * Quota sidebar settings: last and collapsed. They were the card's
-           * FIRST block — seven controls gating the account content below —
-           * and they are the least-touched surface the card owns.
+           * Sidebar & check-in settings render FLAT on the Usage pane — no
+           * fold, no fold heading — and only the active variant's rows (the
+           * CN tab shows CN settings, the Global tab Global settings).
            */}
-          <CardSection title={t('quotaSettingsHeading')}>
-            <QuotaSettingsContent t={t} scope={scope} signedIn={signedIn} />
-          </CardSection>
+          <div className="qdp-settingsFlat">
+            <h3 className="qdp-settingsTitle">{t('quotaSettingsHeading')}</h3>
+            <QuotaSettingsContent
+              t={t}
+              scope={scope}
+              signedIn={signedIn}
+              variant={isUnified
+                ? (activeVariantId === 'qoder' ? 'cn' : 'global')
+                : (currentVariant.id === 'qoder' ? 'cn' : 'global')}
+            />
+          </div>
       </div>
     </div>
   )

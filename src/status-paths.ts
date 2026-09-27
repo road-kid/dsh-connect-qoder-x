@@ -83,6 +83,8 @@ export interface QoderPatSummary {
   savedAtMs?: number
   /** Last four characters of the token. */
   patTail?: string
+  /** The subscriber name the credential belongs to, when the upstream reported one. */
+  accountName?: string
 }
 
 /** One model's recorded probe observation, as the card displays it. */
@@ -118,11 +120,13 @@ export interface QoderProbeAction {
    * All are writes, which is why they share this route's in-process key
    * and loopback guards rather than the read-only status GET.
    */
-  action: 'probe' | 'clear' | 'refresh' | 'set-maximum-context-window' | 'clear-checkin-logs' | 'checkin' | 'set-models-enabled'
-  /** Target model id; required for `probe`. */
+  action: 'probe' | 'clear' | 'refresh' | 'set-maximum-context-window' | 'clear-checkin-logs' | 'checkin' | 'set-models-enabled' | 'set-model-context-window'
+  /** Target model id; required for `probe` and `set-model-context-window`. */
   model?: string
   /** Requested value for `set-maximum-context-window` or `set-models-enabled`. */
   enabled?: boolean
+  /** Requested per-model window tokens; 0 clears the override. */
+  window?: number
   /** Target model ids for `set-models-enabled` (supports single, batch, or all). */
   models?: readonly string[]
 }
