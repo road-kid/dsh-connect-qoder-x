@@ -6,10 +6,11 @@ import type { QoderTransport } from '../src/qoder/transport/index.ts'
 /**
  * The credit parse in all its shapes: how `fetchCredits` maps one
  * `readAccount` answer onto the card's `QoderCredits`, and what the expiry
- * fields do. The passthrough rule changed with the upstream: Qoder reports one
- * cycle-level `expiresAt` (not a per-package `PackageEndTime`), and it rides
- * to the card verbatim — this plugin never parses or recomputes it, leaving
- * "remaining days" to whatever locale formatting the renderer applies.
+ * fields do. `expiresAt` is the account's cycle boundary: it reaches
+ * `cycleResetTime` only. Package rows never borrow it — the live 2026-09-27
+ * account showed one year-9999 "no expiry" sentinel copied onto all three
+ * rows that way. Rows carry no expiry until the upstream reports a real
+ * per-package one (today's `quota/usage` has no such field).
  */
 
 function clientFor(account: QoderAccountInfo | undefined, readAccount?: QoderTransport['readAccount']) {
@@ -56,7 +57,7 @@ describe('fetchCredits shapes', () => {
     })
   })
 
-  it('appends the organization package and carries the cycle fields verbatim', async () => {
+  it('appends the organization package; the cycle field rides only cycleResetTime', async () => {
     const credits = await clientFor(account({
       userQuota: { total: 100, used: 30, remaining: 70, percentage: 30, unit: 'credits' },
       orgResourcePackage: { total: 500, used: 100, remaining: 400, percentage: 20, unit: 'credits' },
@@ -65,8 +66,8 @@ describe('fetchCredits shapes', () => {
       expiresAt: '2026-10-01T00:00:00Z',
     })).fetchCredits()
     expect(credits.accounts).toEqual([
-      { packageName: '个人额度', remain: 70, size: 100, packageEndTime: '2026-10-01T00:00:00Z' },
-      { packageName: '组织资源包', remain: 400, size: 500, packageEndTime: '2026-10-01T00:00:00Z' },
+      { packageName: '个人额度', remain: 70, size: 100 },
+      { packageName: '组织资源包', remain: 400, size: 500 },
     ])
     expect(credits.total).toBe(33)
     expect(credits.totalSize).toBe(600)
@@ -82,7 +83,7 @@ describe('fetchCredits shapes', () => {
     expect(credits.unlimited).toBe(true)
   })
 
-  it('passes every string through, even an empty one — verbatim is verbatim', async () => {
+  it('passes the cycle string through verbatim, even an empty one', async () => {
     // The WorkBuddy parser dropped empty PackageEndTime strings; the Qoder
     // answer has one expiresAt field checked for presence only. Locking the
     // difference so a "cleanup" here is a visible decision, not a silent one.
@@ -90,7 +91,7 @@ describe('fetchCredits shapes', () => {
       userQuota: { total: 10, used: 1, remaining: 9, percentage: 10, unit: 'credits' },
       expiresAt: '',
     })).fetchCredits()
-    expect(credits.accounts[0]).toEqual({ packageName: '个人额度', remain: 9, size: 10, packageEndTime: '' })
+    expect(credits.accounts[0]).toEqual({ packageName: '个人额度', remain: 9, size: 10 })
     expect(credits.cycleResetTime).toBe('')
   })
 
