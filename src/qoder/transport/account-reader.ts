@@ -88,14 +88,35 @@ function normalizeQuota(raw?: RawQuota): QoderQuota | undefined {
 }
 
 
+/**
+ * Qoder 表示「无到期」的哨兵值：9999-12-31T00:00:00Z。
+ * 实测于 GET /api/v2/quota/usage：`expiresAt: 253402214400000`（毫秒），
+ * 在 Asia/Shanghai 渲染成「9999年12月31日 08:00」—— 这正是要修的 bug。
+ * 该值是完全合法的日期，会通过一切 `> 0` 检查，所以必须在日期层面识别：
+ * UTC 年份 ≥ 9999 即哨兵，归一化为 undefined（渲染为「无到期」），绝不打印成截止日。
+ */
+function isPerpetualSentinel(ms: number): boolean {
+  return new Date(ms).getUTCFullYear() >= 9999
+}
+
+/** 数字纪元统一为毫秒：秒级(< 1e12)×1000，毫秒级原样。读错单位会把秒当 1970 年。 */
+function epochToMs(value: number): number {
+  return value < 1e12 ? value * 1000 : value
+}
+
 function normalizeExpiresAt(rawExpires?: number | string): string | undefined {
   if (rawExpires === undefined || rawExpires === null) return undefined
   if (typeof rawExpires === 'number' && rawExpires > 0) {
-    return new Date(rawExpires).toISOString()
+    const ms = epochToMs(rawExpires)
+    if (isPerpetualSentinel(ms)) return undefined
+    return new Date(ms).toISOString()
   }
   if (typeof rawExpires === 'string' && rawExpires.length > 0) {
     const parsed = Date.parse(rawExpires)
-    if (!Number.isNaN(parsed) && parsed > 0) return new Date(parsed).toISOString()
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      if (isPerpetualSentinel(parsed)) return undefined
+      return new Date(parsed).toISOString()
+    }
   }
   return undefined
 }
