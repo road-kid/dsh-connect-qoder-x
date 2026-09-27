@@ -906,6 +906,11 @@ declare class QoderUpstreamClient {
    * package; each becomes a package row the card already knows how to draw.
    * An unbounded personal allowance (`total === 0`, not exceeded) is the
    * account's "unlimited" state.
+   *
+   * `expiresAt` 是账号级的周期边界（喂给 `cycleResetTime`），不是任何资源包
+   * 自己的效期。此前三个包行都借用它作 `packageEndTime`，把同一个 9999 哨兵
+   * 同时印在三行上 —— 官方页各包效期互不相同。`quota/usage` 不含 per-bucket
+   * 效期字段，所以包行不携带效期，渲染为「无到期」，绝不猜日期。
    */
   fetchCredits(signal?: AbortSignal): Promise<QoderCredits>;
   /**
