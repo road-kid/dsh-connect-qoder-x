@@ -1,7 +1,7 @@
 /** Qoder status card contributed to Harness Plugin configuration. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { CSSProperties, ReactElement } from 'react'
+import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import {
@@ -93,9 +93,20 @@ export const QODER_GLOBAL_CARD: QoderCardVariant = {
 
 /** Both cards, in display order (China first). */
 export const QODER_CARD_VARIANTS: readonly QoderCardVariant[] = [QODER_CN_CARD, QODER_GLOBAL_CARD]
-/** Props delivered by the Plugin configuration item slot. */
+/**
+ * Props delivered by the Plugins page's configuration seats.
+ *
+ * `view` is the owner's contract (`PluginConfigViewProps` in
+ * `ui-plugin-manager`): `summary` asks for the one-liner the card list shows and
+ * the fallback for a row with no description, `page` asks for the configuration
+ * body. On `page` the OWNER already draws the title, icon, and breadcrumb, so
+ * this component draws no heading and no disclosure chrome of its own.
+ *
+ * The slot is named by the seat this component is primarily registered into;
+ * the sibling registration (`plugins.bundle.config`) passes the same props.
+ */
 export type QoderPluginCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.row.config'>
   & Partial<QoderPluginCardInjected>
 
 const POLL_INTERVAL_MS = 60_000
@@ -130,78 +141,20 @@ const cardStyle: CSSProperties = {
 }
 /** Hover, matching the built-in card's `:hover`. Inline styles cannot express a pseudo-class. */
 const cardHoverStyle: CSSProperties = { borderColor: 'var(--dsw-alias-label-dimmed)' }
-/** Expanded, matching the built-in card's open state. */
+/**
+ * The page face: the card is no longer collapsible, so it renders in the "open"
+ * treatment unconditionally — the tone the built-in card used while expanded.
+ */
 const cardOpenStyle: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-2)',
   borderColor: 'var(--dsw-alias-label-dimmed)',
 }
-const headerStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  width: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  border: 0,
-  borderRadius: 12,
-  padding: '14px 16px',
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-  appearance: 'none',
-}
-/**
- * The built-in header's keyboard focus ring.
- *
- * `:focus-visible` is what makes the ring appear for keyboard navigation but not
- * for a mouse click, and an inline style cannot express a pseudo-class — so the
- * component tracks it and applies this instead. Without it the header falls back
- * to the browser's own outline, which is the black box that used to appear on
- * focus where the built-in card shows a brand-coloured ring.
- */
-const headerFocusStyle: CSSProperties = {
-  outline: '2px solid var(--dsw-alias-brand-primary)',
-  outlineOffset: -2,
-}
-const headTextStyle: CSSProperties = { display: 'flex', flex: 1, minWidth: 0, flexDirection: 'column', gap: 4 }
-const nameStyle: CSSProperties = { fontSize: 15, lineHeight: 1.4, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' }
 const descriptionStyle: CSSProperties = { fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' }
 
 /**
- * The disclosure chevron, drawn to match the Settings panel's own card.
- *
- * The built-in card renders `IconChevronDownOutline14` from the client's shared
- * icon catalog, which the shell seeds into the module table. This plugin does
- * not request that catalog, so the same outline is drawn here from the same path
- * data: the text `⌄` glyph this replaces had a different shape, weight, and
- * baseline from the icon the cards beside it use.
+ * The page body's inner separator. The card is now the whole page, so this rule
+ * sits at the top of the body rather than under a disclosure header.
  */
-function ChevronDownIcon(): ReactElement {
-  return (
-    <svg
-      width={14}
-      height={14}
-      viewBox="0 0 14 14"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <path
-        d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z"
-        fill="currentColor"
-      />
-    </svg>
-  )
-}
-
-/** The built-in card's chevron rule: tertiary color, and only the rotation animates. */
-const chevronStyle: CSSProperties = {
-  flex: 'none',
-  display: 'flex',
-  color: 'var(--dsw-alias-label-tertiary)',
-  transition: 'transform .16s',
-}
 const cardBodyStyle: CSSProperties = {
   borderTop: '.5px solid var(--dsw-alias-border-l2)',
   margin: '0 16px',
@@ -865,9 +818,18 @@ function CheckInLogTable({
   )
 }
 
-/** Render Qoder PAT state, quota, catalog, and context capacities as one expandable card. */
+/**
+ * Render Qoder PAT state, quota, catalog, and context capacities as the Plugins
+ * page's configuration page (or its one-liner, when the owner asks for
+ * `summary`).
+ *
+ * The card is no longer its own disclosure: the Plugins page draws the title,
+ * the icon, the breadcrumb, and the row's 「配置」 control, and this component
+ * renders only the body. The variant switcher and the tab strip STAY — they are
+ * navigation WITHIN the card, not chrome around it.
+ */
 export function QoderPluginCard(props: QoderPluginCardProps) {
-  const { t, scope, signedIn, variant, unified } = props
+  const { t, scope, signedIn, variant, unified, view } = props
   if (t === undefined) throw new Error('Qoder plugin card requires its translation function')
 
   const isUnified = unified === true
@@ -877,9 +839,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     ? (activeVariantId === 'qoder' ? QODER_CN_CARD : QODER_GLOBAL_CARD)
     : (variant ?? QODER_CN_CARD)
 
-  const [open, setOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
-  const [headerFocused, setHeaderFocused] = useState(false)
   const [status, setStatus] = useState<QoderWebStatus>()
   const [signedInState, setSignedInState] = useState<boolean>()
   const [readFailure, setReadFailure] = useState<string>()
@@ -948,8 +908,10 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     }
   }, [currentVariant.statusPath, t])
 
+  // The card IS the page now: the owner mounts it only while its detail page is
+  // open, so there is no `open` flag to gate the first read on. It still reads
+  // once per variant switch, and re-reads when the variant changes.
   useEffect(() => {
-    if (!open) return
     setStatus(undefined)
     setSignedInState(undefined)
     setReadFailure(undefined)
@@ -960,17 +922,20 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     const controller = new AbortController()
     void refresh(controller.signal)
     return () => { controller.abort() }
-  }, [open, currentVariant.statusPath, refresh])
+  }, [currentVariant.statusPath, refresh])
 
+  // The 60s poll. Also ungated: a mounted page is a page the user is looking at,
+  // which is exactly when the poll is wanted (the tab is hidden only while the
+  // user is away, and `refresh` already tolerates a hidden document elsewhere).
   useEffect(() => {
-    if (!open || signedInState === false) return
+    if (signedInState === false) return
     const controller = new AbortController()
     const timer = window.setInterval(() => { void refresh(controller.signal) }, POLL_INTERVAL_MS)
     return () => {
       window.clearInterval(timer)
       controller.abort()
     }
-  }, [open, refresh, signedInState])
+  }, [refresh, signedInState])
 
   const manualRefresh = async (): Promise<void> => {
     setBusy(true)
@@ -1298,7 +1263,9 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     </div>
   )
 
-  const cardTitle = isUnified ? t('unifiedTitle') : t(currentVariant.titleKey)
+  // The page's one-liner for the card list. It is ALSO the page's own intro
+  // line: the Plugins page draws the title from the package manifest, so the
+  // description text has to come from here either way.
   const cardIntro = isUnified ? t('unifiedIntro') : t(currentVariant.introKey)
 
   const label = status === undefined
@@ -1329,68 +1296,47 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     ? (status === undefined ? 'loading' : status.status)
     : (globalSignedIn ? 'signed-in' : 'signed-out')
 
+  // The one-liner the card list shows (and the fallback where a row has no
+  // description). Rendered without any state read: it is asked for by the list
+  // view, where none of this card's controls exist.
+  if (view === 'summary') return <>{cardIntro}</>
+
   return (
-    <li
-      style={{ ...cardStyle, ...hovered ? cardHoverStyle : {}, ...open ? cardOpenStyle : {} }}
+    <div
+      style={{ ...cardStyle, ...hovered ? cardHoverStyle : {}, ...cardOpenStyle }}
       onMouseEnter={() => { setHovered(true) }}
       onMouseLeave={() => { setHovered(false) }}
     >
-      <button
-        type="button"
-        style={{ ...headerStyle, ...headerFocused ? headerFocusStyle : {} }}
-        aria-expanded={open}
-        aria-label={`${t(open ? 'collapse' : 'expand')}: ${cardTitle}`}
-        onClick={() => { setOpen(!open) }}
-        onFocus={event => {
-          let keyboard = true
-          try {
-            keyboard = event.currentTarget.matches(':focus-visible')
-          } catch {
-            keyboard = true
-          }
-          if (keyboard) setHeaderFocused(true)
-        }}
-        onBlur={() => { setHeaderFocused(false) }}
-      >
-        <span style={headTextStyle}>
-          <span style={nameStyle}>{cardTitle}</span>
-          <span style={descriptionStyle}>{cardIntro}</span>
-        </span>
-        <span style={{ ...chevronStyle, transform: open ? 'rotate(180deg)' : 'none' }}>
-          <ChevronDownIcon />
-        </span>
-      </button>
-      {open ? (
-        <div style={cardBodyStyle}>
-          {isUnified ? (
-            <>
-              {/* Top section: Qoder 侧栏设置 */}
-              <QuotaSettingsContent t={t} scope={scope} signedIn={signedIn} />
-              {/* Segmented Tab Switcher (Figure 1) */}
-              <div style={segmentedContainerStyle} role="tablist" aria-label="Qoder Version Selection">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeVariantId === 'qoder'}
-                  style={segmentedTabItemStyle(activeVariantId === 'qoder')}
-                  onClick={() => setActiveVariantId('qoder')}
-                >
-                  <span style={dotStyle(cnDotStatus)} aria-hidden="true" />
-                  <span>{t('variantTabCN')}</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeVariantId === 'qoder-global'}
-                  style={segmentedTabItemStyle(activeVariantId === 'qoder-global')}
-                  onClick={() => setActiveVariantId('qoder-global')}
-                >
-                  <span style={dotStyle(globalDotStatus)} aria-hidden="true" />
-                  <span>{t('variantTabGlobal')}</span>
-                </button>
-              </div>
-            </>
-          ) : null}
+      <div style={cardBodyStyle}>
+        {isUnified ? (
+          <>
+            {/* Top section: Qoder 侧栏设置 */}
+            <QuotaSettingsContent t={t} scope={scope} signedIn={signedIn} />
+            {/* Segmented Tab Switcher (Figure 1) */}
+            <div style={segmentedContainerStyle} role="tablist" aria-label="Qoder Version Selection">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeVariantId === 'qoder'}
+                style={segmentedTabItemStyle(activeVariantId === 'qoder')}
+                onClick={() => setActiveVariantId('qoder')}
+              >
+                <span style={dotStyle(cnDotStatus)} aria-hidden="true" />
+                <span>{t('variantTabCN')}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeVariantId === 'qoder-global'}
+                style={segmentedTabItemStyle(activeVariantId === 'qoder-global')}
+                onClick={() => setActiveVariantId('qoder-global')}
+              >
+                <span style={dotStyle(globalDotStatus)} aria-hidden="true" />
+                <span>{t('variantTabGlobal')}</span>
+              </button>
+            </div>
+          </>
+        ) : null}
 
           <h3 style={quotaTitleStyle}>{t('accountHeading')}</h3>
           <div style={rowStyle}>
@@ -1545,8 +1491,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
               </>
             : null}
           {status?.status === 'error' ? <p style={errorStyle}>{status.message}</p> : null}
-        </div>
-      ) : null}
-    </li>
+      </div>
+    </div>
   )
 }

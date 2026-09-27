@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 // The settings domain base owns the `settings.section` slot contract (and the
 // 0.1.5-only `ctx.settingsScope` augmentation) — imported for its TYPES only,
@@ -18,8 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { QoderProbeControl } from './QoderProbeControl.tsx'
 import { QODER_CARD_VARIANTS, QoderPluginCard } from './QoderPluginCard.tsx'
 import type { QoderPluginCardInjected } from './QoderPluginCard.tsx'
-import { QuotaSettingsCard } from './QuotaSettingsCard.tsx'
-import type { QuotaSection, QuotaSettingsCardInjected, QuotaSettingsScope } from './QuotaSettingsCard.tsx'
+import type { QuotaSection, QuotaSettingsScope } from './QuotaSettingsCard.tsx'
 import { OwnQuotaSettingsScope } from './http-settings-scope.ts'
 import { QuotaDashboard, SidebarQuotaCard } from './SidebarQuotaCard.tsx'
 import type { QuotaDashboardInjected, QuotaDashboardState, QuotaDashboardProps, SidebarQuotaCardInjected, SidebarQuotaCardProps } from './SidebarQuotaCard.tsx'
@@ -41,21 +39,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /** Shared quota-settings and sidebar-card copy. */
     'panel.qoder-quota': QoderSettingsKey
   }
-  interface SlotMap {
-    /**
-     * One card inside the shared 《插件设置》 block that the connect plugins
-     * build on DSH 0.1.7 from `settings.section`.
-     *
-     * 0.1.7 removed the Plugins tab's card list (`settings.plugin.item`), so the
-     * three connect plugins declare this child slot under the shared container
-     * and register their own entry into it. Options: `id` (the registering
-     * plugin's package name, unique), `order` (card order). Declared by
-     * whichever plugin wins the container race — the declaration is part of the
-     * container's `children` table, so it exists exactly while the container
-     * does.
-     */
-    'plugin-settings.item': { kind: 'list'; scope: 'root' }
-  }
 }
 
 /** Stable browser-plugin name. */
@@ -66,18 +49,23 @@ export const name = 'dsh-connect-qoder-x-client'
  * DSH 0.1.2 removed `@deepseek-ai/dsh-client-runtime` (the package that used to
  * hold the browser `ClientContext` alias and the `slots` service). The services
  * this card relies on now come from narrower packages: the `slots` registry
- * moved to `@deepseek-ai/dsh-client-ui-renderer`, `locale` stayed in
- * `@deepseek-ai/dsh-client-locale`, and the Plugins tab's card list
- * (`settings.plugin.item`) is declared by
- * `@deepseek-ai/dsh-client-ui-settings-plugins`. Those packages are named in
- * the package's `dsh.client.inject` list.
+ * moved to `@deepseek-ai/dsh-client-ui-renderer` and `locale` stayed in
+ * `@deepseek-ai/dsh-client-locale`. Both are named in the package's
+ * `dsh.client.inject` list.
  *
  * NOT declared here: the settings services. `settingsScope` (0.1.5) does not
  * exist at all on 0.1.7 — a static service dependency on it is what left this
  * plugin's client activation pending forever — and `configForms` (0.1.7) does
- * not exist on 0.1.5. Both are waited for with `ctx.inject([...], callback)`
- * below, where a missing service simply never calls back instead of holding
- * activation.
+ * not exist on 0.1.5. Neither is used any more (see `OwnQuotaSettingsScope`),
+ * so no callback waits on them either.
+ *
+ * ALSO NOT declared here: `ui-plugin-manager`. The two plugin-configuration
+ * seats this card registers into (`plugins.row.config`, `plugins.bundle.config`)
+ * are declared by that package, but the registrations go through
+ * `ctx.slots.inject`, which is a CALLBACK on a slot NAME — a deployment that
+ * never composes the Plugins page simply never calls back, exactly like the
+ * optional services above. A static dependency would instead gate this whole
+ * client on a package the plugin does not need to serve models.
  */
 // `modelDirectories` reads the active session through `remote.session`.
 // Declaring that dependency at the client entry is required by the Desktop
@@ -99,78 +87,64 @@ const VARIANT_STATUS: Record<string, string> = {
 const QUOTA_SETTINGS_NAMESPACE = 'qoder-quota'
 
 /**
- * The 0.1.7 `configForms` key for this plugin: the PROFILE ENTRY ID.
+ * The profile ROW ID this plugin runs as — the id its own patch declares.
  *
- * 0.1.7 keys a settings form by the id of the profile row the plugin runs as,
- * not by its package name: `dsh-settings`' `describe()` publishes
- * `ns: entry.options.id` for the rows `configEditor.configuration()` yields
- * (`dsh-settings/lib/index.js:411-421`, `dsh-config-editor/lib/index.js:29-44`),
- * and cordis keeps an explicit row id (`cordis-plugin-loader/lib/index.js:162`).
- * This bundle's own patch inserts that row with an explicit id —
- * `cordis.patch.yml`: `- insert: [{ id: llm-qoder-x, name: dsh-connect-qoder-x }]` —
- * so `llm-qoder-x` is the namespace the Host serves here. A profile that composes
- * this bundle under some other id (the package name is what an entry without an
- * explicit id falls back to) would serve that id instead; the card then reads
- * `unavailable` and stays hidden rather than showing another plugin's values.
+ * `cordis.patch.yml` inserts `- id: llm-qoder-x, name: dsh-connect-qoder-x`, so
+ * the Plugins page reports this plugin's row as `llm-qoder-x`. The browser half
+ * needs it for exactly one thing: the right half of {@link ROW_CONFIG_KEY}.
+ *
+ * A profile that composes this bundle under some OTHER id — the package name is
+ * what an entry without an explicit id falls back to — would dispatch a key this
+ * constant does not match, and the card simply would not appear on that row.
+ * There is no partial failure mode: a keyed slot nobody dispatches renders
+ * nothing.
  */
 const ENTRY_ID = 'llm-qoder-x'
 
 /**
- * The shared 《插件设置》 block's slot and entry ids.
+ * The two 0.1.7 seats this card registers into, on the Plugins page.
  *
- * The three connect plugins must agree on these exactly: `settings.section` is
- * a `list` slot, so many blocks may coexist, but a child slot name may be
- * declared once and a list entry id may be registered once. The first plugin to
- * arrive registers the container (declaring the child slot); the others detect
- * it and attach their own entry, which is why the ids are fixed constants
- * rather than per-plugin names.
+ * Both are KEYED slots declared by `@deepseek-ai/dsh-client-ui-plugin-manager`
+ * (`packages/client/ui-plugin-manager/src/client/slot-contract.ts`) and both
+ * receive the same card component; only the key differs:
+ *
+ *   - `plugins.row.config`, keyed `<package name>#<row id>`, is the PRIMARY seat.
+ *     Hitting it is what makes the Plugins page put a 「配置」 control on this
+ *     plugin's row, and clicking that opens this card as the row's own page —
+ *     the 「插件 → 点插件名 → 展开设置」 path.
+ *   - `plugins.bundle.config`, keyed by PACKAGE NAME alone, renders inline on the
+ *     package detail page between the description and the row list: the same
+ *     card for a reader who opened the package rather than the row.
+ *
+ * This replaces the `settings.section` container plus the community-private
+ * `plugin-settings.item` child that the three connect plugins used to rendezvous
+ * in. That rendezvous is gone: the slot is a normal keyed seat, the owner
+ * dispatches it, and no sibling plugin has to agree on an id.
  */
-const SHARED_SECTION_SLOT = 'settings.section'
-const SHARED_SECTION_ID = 'plugin-settings'
-const SHARED_SECTION_ORDER = 900
-const SHARED_ITEM_SLOT = 'plugin-settings.item'
-/** This plugin's entry id inside the shared block: its package name (unique). */
-const SHARED_ITEM_ID = 'dsh-connect-qoder-x'
-/** The shared block's title, fixed by the contract so all three plugins agree. */
-const SHARED_SECTION_LABEL = '插件设置'
+const ROW_CONFIG_SLOT = 'plugins.row.config'
+const BUNDLE_CONFIG_SLOT = 'plugins.bundle.config'
 
 /**
- * The 0.1.7 settings face, read structurally inside the `configForms` callback.
- *
- * The 0.1.5 typings this bundle compiles against do not declare `configForms`
- * (it replaced `settingsScope` in 0.1.7), so the service is described here by
- * the shape the 0.1.7 provider has: `get(entryId)` hands back the entry's form,
- * created on demand and never throwing for an unknown id (an unserved namespace
- * simply reads `unavailable`).
+ * This plugin's package name — the `plugins.bundle.config` key, and the left half
+ * of the `plugins.row.config` key.
  */
-interface ConfigFormsFace {
-  get: (entryId: string) => QuotaSettingsScope<QuotaSection>
-}
+const PACKAGE_NAME = 'dsh-connect-qoder-x'
 
 /**
- * The shared 《插件设置》 section the 0.1.7 card list lives in.
+ * The complete `plugins.row.config` key.
  *
- * It renders nothing but its child slot: every connect plugin contributes its
- * own card as one `plugin-settings.item` entry. The list wrapper mirrors the
- * list the removed Plugins tab used for the same cards (`gap: 10`, no markers),
- * so the cards keep the spacing they had on 0.1.5.
- *
- * @param props - the section's slot props (owner share plus `renderSlot`).
- * @returns the ordered card list.
+ * The owner derives it as `` `${pkg.name}#${row.rowId}` `` where `rowId` comes
+ * from the id the bundle's patch declares (`plugin-manager/lib/index.js`:
+ * `rows.push({ rowId: row.id, ... })`, fed by `composeEntries`), and this
+ * plugin's patch inserts its row as `id: llm-qoder-x`. Built from the two
+ * constants rather than written as one literal so a rename cannot desync them
+ * from {@link ENTRY_ID} and {@link PACKAGE_NAME}.
  */
-function PluginSettingsSection(
-  props: PropsRuntime<'settings.section'> & PropsRenderSlots<typeof SHARED_ITEM_SLOT>,
-): React.ReactNode {
-  return (
-    <ul style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 0, listStyle: 'none' }}>
-      {props.renderSlot(SHARED_ITEM_SLOT, {})}
-    </ul>
-  )
-}
+const ROW_CONFIG_KEY = `${PACKAGE_NAME}#${ENTRY_ID}`
 
 /**
- * Register card copy, the shared quota-settings card, the two variant cards,
- * and the sidebar quota cards.
+ * Register card copy, the unified Qoder card on both Plugins-page seats, and the
+ * sidebar quota cards.
  *
  * The entire body is wrapped so that a DSH slot-API breaking change (for
  * example the rc.6→rc.7 `id`→`key` / `order`→`priority` rename) degrades
@@ -178,11 +152,6 @@ function PluginSettingsSection(
  * the red "Failed to load plugins" banner. The host provider keeps working:
  * the `qoder` model channel is unaffected, and `dsh-connect-qoder-x
  * status` reports host health via the heartbeat file.
- *
- * Card ORDER: the Plugins tab dispatches `settings.plugin.item` in
- * registration order, so this entry registers the shared quota-settings card
- * first (top), then CN, then Global — the layout agreed for this feature
- * (统一设置 → CN → Global, china first).
  *
  * NOTE: the try/catch boundary of this function is mirrored (duplicated) in
  * `tests/client-fallback.spec.ts`, because the real client entry imports
@@ -198,35 +167,19 @@ export function apply(ctx: ClientContext): void {
     ctx.effect(() => ctx.locale.register(namespace, { zh, en }), 'dsh-connect-qoder-x: settings copy')
     const t = ctx.locale.bind(namespace) as QoderPluginCardInjected['t']
 
-    // 1. Shared quota-settings card. Card ORDER is priority-ascending in the
-    // Plugins tab (measured: lower priority renders first), so this card gets
-    // the lowest priority number of the three to sit above the two variant
-    // cards: 统一设置 (50) → CN (60) → Global (70).
-    //
-    // The band starts at 50 deliberately: the sibling connect plugin in this
-    // workspace registers the same three seats at 10/20/30, and the ledger
-    // breaks priority ties by registration order, so equal or overlapping
-    // values interleaved the two plugins' cards instead of keeping each
-    // plugin's group together. A band no sibling uses makes the grouping
-    // independent of load order.
-    const quotaSettingsInjected: QuotaSettingsCardInjected = {
-      t,
-      // Read live at render: the sign-in state changes without a remount.
-      signedIn: () => quotaSignInState(),
-    }
+    // 1. The quota settings values the card edits, bound to this plugin's OWN
+    // settings file. The face is filled in by `adoptQuotaScope` below.
     /**
-     * The bound quota settings face, filled in as soon as a host configuration
-     * service becomes available (see the two `ctx.inject` callbacks below).
+     * The bound quota settings face, filled in as soon as this plugin's own
+     * settings file answers (see {@link OwnQuotaSettingsScope}).
      *
-     * It is bound as a SERVICE ARRIVES rather than when the settings card's
-     * inject factory first runs: the factory only executes while the settings
-     * page renders, so a fresh page load read no toggles and rendered no sidebar
-     * card until the user opened settings — the exact regression the
-     * commandcode card avoids by reading its STORED fact independently of the
-     * settings page. The face's subscription mirrors every accepted snapshot
+     * It is bound on a STORED fact rather than when the card's inject factory
+     * first runs: the factory only executes while the Plugins page renders, so a
+     * fresh page load read no toggles and rendered no sidebar card until the user
+     * opened that page. The face's subscription mirrors every accepted snapshot
      * (toggles + interval) into the shared store the sidebar cards and the
-     * dashboard read; a deployment with no configuration service never binds,
-     * and the sidebar cards stay hidden.
+     * dashboard read; a deployment where the host route never answers never
+     * binds, and the sidebar cards stay hidden.
      */
     let quotaScope: QuotaSettingsScope<QuotaSection> | undefined
     const adoptQuotaScope = (scope: QuotaSettingsScope<QuotaSection>): void => {
@@ -240,66 +193,42 @@ export function apply(ctx: ClientContext): void {
       scope.subscribe(applySnapshot)
     }
 
-    // Unified Qoder plugin configuration card: merges sidebar quota settings,
-    // China variant, and Global variant into one single card titled "Qoder".
-    const registerUnifiedCard = (slot: 'settings.plugin.item' | 'plugin-settings.item'): (() => void) => {
-      const inject = (): QoderPluginCardInjected => ({
-        t,
-        scope: quotaScope,
-        signedIn: () => quotaSignInState(),
-        unified: true,
-      })
-      // 0.1.5 dispatches `settings.plugin.item` by the namespace the card edits
-      // (a keyed slot, ordered by priority); the shared 0.1.7 block dispatches
-      // its `list` entries by id (ordered by order). The shared block's card
-      // rank is fixed across the three connect plugins (ascending order):
-      // session-prompt 10 / workbuddy 20 / qoder 30.
-      if (slot === 'settings.plugin.item') {
-        return ctx.slots.inject(slot, () => ctx.slots.register({ name: slot, key: 'qoder', priority: 50, inject }, QoderPluginCard))
-      }
-      return ctx.slots.inject(slot, () => ctx.slots.register({ name: slot, id: SHARED_ITEM_ID, order: 30, inject }, QoderPluginCard))
-    }
+    /**
+     * The card's inject face. One face serves both seats: the card is the same
+     * component either way, and it reads `view` from its PROPS (the owner's
+     * contract), not from here.
+     */
+    const cardFace = (): QoderPluginCardInjected => ({
+      t,
+      scope: quotaScope,
+      signedIn: () => quotaSignInState(),
+      unified: true,
+    })
 
     /**
-     * Attach this plugin's card to the shared 《插件设置》 block, building the
-     * block first if nobody has.
+     * Register the unified Qoder card on both Plugins-page configuration seats.
      *
-     * Backoff protocol (identical in all three connect plugins, on purpose: a
-     * `list` slot takes many entries but only ONE registration per id, and a
-     * child slot name may be declared once, so the container is a rendezvous
-     * rather than a race to be won):
-     *   1. wait for the host to declare `settings.section`;
-     *   2. if an entry with the shared id is already there, only attach;
-     *   3. otherwise register the container — and if a sibling won the race and
-     *      the registration throws, fall back to attaching to theirs.
+     * Two registrations, one component, keys derived above. They are independent
+     * — a deployment that declares only one of the two seats gets the card on
+     * that one and simply never calls back for the other — so neither failure
+     * can suppress the other.
      */
-    const joinSharedSettingsBlock = (): void => {
-      ctx.slots.inject(SHARED_SECTION_SLOT, () => {
-        let disposeContainer: (() => void) | undefined
-        const claimed = ctx.slots.entries(SHARED_SECTION_SLOT)
-          .some(entry => entry.options?.id === SHARED_SECTION_ID)
-        if (!claimed) {
-          try {
-            disposeContainer = ctx.slots.register({
-              name: SHARED_SECTION_SLOT,
-              id: SHARED_SECTION_ID,
-              order: SHARED_SECTION_ORDER,
-              label: () => SHARED_SECTION_LABEL,
-              children: { [SHARED_ITEM_SLOT]: { kind: 'list', scope: 'root' } },
-            }, PluginSettingsSection)
-          } catch (error: unknown) {
-            // A sibling registered the container between the probe and this
-            // call: their declaration is the live one, so attach to it.
-            console.error('[dsh-connect-qoder-x] shared plugin-settings block lost the race; attaching to the winner:', error)
-          }
-        }
-        const disposeItem = registerUnifiedCard(SHARED_ITEM_SLOT)
-        return () => {
-          disposeItem()
-          disposeContainer?.()
-        }
-      })
+    const registerCard = (slot: typeof ROW_CONFIG_SLOT | typeof BUNDLE_CONFIG_SLOT, key: string): void => {
+      try {
+        ctx.slots.inject(slot, () => ctx.slots.register({
+          name: slot,
+          key,
+          inject: cardFace,
+        // The slot names are declared structurally in `quota-slots.ts`, where
+        // the owner share (`view`) they carry is written out; the component is
+        // typed against that same contract.
+        } as never, QoderPluginCard as never))
+      } catch (error: unknown) {
+        console.error(`[dsh-connect-qoder-x] card slot "${slot}" failed to register (host provider unaffected):`, error)
+      }
     }
+    registerCard(ROW_CONFIG_SLOT, ROW_CONFIG_KEY)
+    registerCard(BUNDLE_CONFIG_SLOT, PACKAGE_NAME)
 
     /**
      * 插件自有配置（`<profile>/.dsh-connect-qoder-x/settings.json`）：两条宿主线的
@@ -312,7 +241,6 @@ export function apply(ctx: ClientContext): void {
     const ownQuotaScope = new OwnQuotaSettingsScope()
     void ownQuotaScope.load()
     adoptQuotaScope(ownQuotaScope as unknown as QuotaSettingsScope<QuotaSection>)
-    joinSharedSettingsBlock()
 
     // Sidebar quota cards + the dashboard they open. Two registrations, one
     // navigation entry — commandcode's pattern: the layout's keyed `main` slot
