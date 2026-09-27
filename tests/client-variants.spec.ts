@@ -190,12 +190,13 @@ describe('plugin card per variant', () => {
       // that mounts it in DSH, so the test supplies only what it uses.
       const props = {
         t: t as QoderPluginCardProps['t'],
+        // The Plugins page renders the card as its configuration page; the
+        // owner draws the title and opened it, so there is nothing to expand.
+        view: 'page' as const,
         ...variant === undefined ? {} : { variant },
       } as unknown as Parameters<typeof QoderPluginCard>[0]
       view = create(createElement(QoderPluginCard, props))
     })
-    // Expand the card: nothing below the header renders until then.
-    await act(async () => { view!.root.findAllByType('button')[0]!.props.onClick() })
   }
 
   const buttonLabels = (): string[] => view!.root.findAllByType('button').map(node => node.children.join(''))
@@ -216,21 +217,22 @@ describe('plugin card per variant', () => {
     await act(async () => { input.props.onChange({ target: { value } }) })
   }
 
-  it('reads the CN route by default and shows the CN title', async () => {
+  it('reads the CN route by default', async () => {
     await mount()
     expect(request.mock.calls[0]![0]).toBe(QODER_CN_CARD.statusPath)
-    expect(JSON.stringify(view!.toJSON())).toContain(en.title)
+    // Every request this card makes must stay on its own variant's route: the
+    // title it used to render is gone (the Plugins page heads the page from the
+    // package manifest), so route discipline is what identifies the variant now.
+    for (const call of request.mock.calls) expect(call[0]).toBe(QODER_CN_CARD.statusPath)
+    expect(QODER_CN_CARD.statusPath).not.toBe(QODER_GLOBAL_CARD.statusPath)
   })
 
-  it('reads the Global route and shows the Global title when handed that variant', async () => {
+  it('reads the Global route when handed that variant', async () => {
     await mount(QODER_GLOBAL_CARD)
     // The critical assertion: the card must not read the CN status document,
     // which would show the other product's account and balance.
     expect(request.mock.calls[0]![0]).toBe(QODER_GLOBAL_CARD.statusPath)
-    expect(request.mock.calls[0]![0]).not.toBe(QODER_CN_CARD.statusPath)
-    const rendered = JSON.stringify(view!.toJSON())
-    expect(rendered).toContain(en.titleAI)
-    expect(rendered).toContain(en.introAI)
+    for (const call of request.mock.calls) expect(call[0]).not.toBe(QODER_CN_CARD.statusPath)
   })
 
   it('reports the PAT source and redacted tail instead of a token', async () => {

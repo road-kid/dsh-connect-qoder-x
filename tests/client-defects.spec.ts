@@ -119,9 +119,11 @@ function doc(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 let view: ReactTestRenderer | undefined
 
 async function mountCard(): Promise<void> {
-  const props = { t } as unknown as Parameters<typeof QoderPluginCard>[0]
+  // The Plugins page renders this card as its configuration page and has
+  // already drawn the title and the control that opened it, so mounting it is
+  // the whole interaction: there is no disclosure to click.
+  const props = { t, view: 'page' } as unknown as Parameters<typeof QoderPluginCard>[0]
   await act(async () => { view = create(createElement(QoderPluginCard, props)) })
-  await act(async () => { view!.root.findAllByType('button')[0]!.props.onClick() })
 }
 
 const pressCard = async (label: string, nth = 0): Promise<void> => {
@@ -302,7 +304,6 @@ describe('QoderPluginCard', () => {
       }) }
       const props = { t, variant: QODER_GLOBAL_CARD } as unknown as Parameters<typeof QoderPluginCard>[0]
       await act(async () => { view = create(createElement(QoderPluginCard, props)) })
-      await act(async () => { view!.root.findAllByType('button')[0]!.props.onClick() })
       await pressCard(en.tabContext)
     }
     /** Fire the preference checkbox, the smallest write the card offers. */

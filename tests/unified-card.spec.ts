@@ -91,6 +91,9 @@ describe('Unified Qoder Plugin Card', () => {
     }
     const props = {
       t: t as QoderPluginCardProps['t'],
+      // The card is the Plugins page's configuration PAGE now, not a collapsed
+      // card: the owner already drew the title and the disclosure affordance.
+      view: 'page' as const,
       unified: true,
       scope: fakeScope as any,
       signedIn: () => ({ cn: true, global: false }),
@@ -100,19 +103,46 @@ describe('Unified Qoder Plugin Card', () => {
     })
   }
 
-  it('renders the unified title and intro in collapsed state', async () => {
+  it('renders the page body with no title, intro, or disclosure chrome of its own', async () => {
     await mountUnified()
     const json = JSON.stringify(view!.toJSON())
-    expect(json).toContain(en.unifiedTitle)
-    expect(json).toContain(en.unifiedIntro)
+    // The body still carries the real controls.
+    expect(json).toContain(en.accountHeading)
+    // But it draws no heading, no intro line, and no disclosure header. The
+    // Plugins page supplies the title from the package manifest and its own
+    // control is what opened this page; repeating any of that here would be a
+    // second, competing disclosure inside the page that already opened it.
+    //
+    // `unifiedTitle` ("Qoder") and `variantTabCN` ("China") are unassertable as
+    // substrings — both occur throughout the body's own text — so this checks the
+    // intro, which is unique, plus the structural absence of the disclosure.
+    expect(json).not.toContain(en.unifiedIntro)
+    expect(view!.root.findAllByProps({ 'aria-expanded': true })).toHaveLength(0)
+    expect(view!.root.findAllByProps({ 'aria-expanded': false })).toHaveLength(0)
+  })
+
+  it('renders only the one-liner when the owner asks for the summary view', async () => {
+    await mountUnified()
+    await act(async () => {
+      view!.update(createElement(QoderPluginCard, {
+        t: t as QoderPluginCardProps['t'],
+        unified: true,
+        view: 'summary',
+      } as unknown as Parameters<typeof QoderPluginCard>[0]))
+    })
+    // Exactly the one-liner, as TEXT: no wrapper, no controls. The owner renders
+    // this inside the card row's description line.
+    expect(view!.toJSON()).toBe(en.unifiedIntro)
+    // Chosen for being ABSENT from the one-liner itself, so their absence is
+    // evidence about the view and not about the copy: `variantTabCN` is the bare
+    // word "China", which the intro already contains.
+    const json = JSON.stringify(view!.toJSON())
+    expect(json).not.toContain(en.quotaToggleCN)
+    expect(json).not.toContain(en.quotaPollLabel)
   })
 
   it('expands to show quota settings at the top, followed by the segmented tabs', async () => {
     await mountUnified()
-    // Click header to expand
-    const headerBtn = view!.root.findAllByType('button')[0]!
-    await act(async () => { headerBtn.props.onClick() })
-
     const json = JSON.stringify(view!.toJSON())
     // 1. Top section: Quota settings
     expect(json).toContain(en.quotaToggleCN)
@@ -129,9 +159,6 @@ describe('Unified Qoder Plugin Card', () => {
 
   it('switches between China and Global tabs when clicked', async () => {
     await mountUnified()
-    // Click header to expand
-    await act(async () => { view!.root.findAllByType('button')[0]!.props.onClick() })
-
     // Find the segmented tab buttons: China and Global
     const tabList = view!.root.find(n => n.props.role === 'tablist' && n.props['aria-label'] === 'Qoder Version Selection')
     const tabButtons = tabList.findAllByType('button')
@@ -209,6 +236,9 @@ describe('Unified Qoder Plugin Card', () => {
     }
     const props = {
       t: t as QoderPluginCardProps['t'],
+      // The card is the Plugins page's configuration PAGE now, not a collapsed
+      // card: the owner already drew the title and the disclosure affordance.
+      view: 'page' as const,
       unified: true,
       scope: fakeScope as any,
     } as unknown as Parameters<typeof QoderPluginCard>[0]
@@ -262,6 +292,9 @@ describe('Unified Qoder Plugin Card', () => {
     }
     const props = {
       t: t as QoderPluginCardProps['t'],
+      // The card is the Plugins page's configuration PAGE now, not a collapsed
+      // card: the owner already drew the title and the disclosure affordance.
+      view: 'page' as const,
       unified: true,
       scope: fakeScope as any,
       signedIn: () => ({ cn: false, global: false }),
@@ -462,13 +495,8 @@ describe('Unified Qoder Plugin Card', () => {
       view = create(createElement(QoderPluginCard, {
         t: t as any,
         unified: true,
+        view: 'page',
       } as any))
-    })
-
-    // Expand card
-    const expandBtn = view!.root.findByProps({ 'aria-expanded': false })
-    await act(async () => {
-      expandBtn.props.onClick()
     })
 
     // Find inner tabs (Status, Context, Details, Check-in log)

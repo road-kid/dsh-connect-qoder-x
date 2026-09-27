@@ -11,7 +11,7 @@ import { AttachmentStore } from "@deepseek-ai/dsh-attachment";
  * The plugin's data directory — the ONE place every file the plugin owns
  * lives.
  *
- * Layout: `<profile>/.dsh-qoder-connect/state/` (the profile discovered
+ * Layout: `<profile>/.dsh-connect-qoder-x/state/` (the profile discovered
  * the same way the credential store always did). Everything — PAT files,
  * saved catalogs, probe records, the host heartbeat, and the machine-id
  * seed — writes there, so a profile directory never collects loose
@@ -25,14 +25,14 @@ import { AttachmentStore } from "@deepseek-ai/dsh-attachment";
  * directory without pulling in the credential code (and its upstream
  * dependency) — these modules stay leaf-light on purpose.
  *
- * @module dsh-qoder-connect/paths
+ * @module dsh-connect-qoder-x/paths
  */
 /** The per-profile directory the plugin's data folder lives under. */
-declare const QODER_DATA_DIR_NAME = ".dsh-qoder-connect";
+declare const QODER_DATA_DIR_NAME = ".dsh-connect-qoder-x";
 /** Environment override for the whole data directory. */
 declare const QODER_DATA_DIR_ENV = "DSH_QODER_DATA_DIR";
 /**
- * The plugin's data directory: `<profile>/.dsh-qoder-connect`.
+ * The plugin's data directory: `<profile>/.dsh-connect-qoder-x`.
  *
  * Falls back to the Harness home when no profile can be discovered — a
  * checkout running its own tests, or a host that loads the plugin from
@@ -49,7 +49,7 @@ type QoderRegion = 'global' | 'china';
 /** The two Qoder product variants this plugin serves, by provider id. */
 type QoderVariantId = 'qoder' | 'qoder-global';
 /** Plugin-owned status endpoint consumed by its browser half. */
-declare const QODER_STATUS_PATH = "/plugins/dsh-qoder-connect/status";
+declare const QODER_STATUS_PATH = "/plugins/dsh-connect-qoder-x/status";
 /**
  * Plugin-owned probe control endpoint.
  *
@@ -59,7 +59,7 @@ declare const QODER_STATUS_PATH = "/plugins/dsh-qoder-connect/status";
  * also requires the in-process key the browser half receives with the status
  * document.
  */
-declare const QODER_PROBE_PATH = "/plugins/dsh-qoder-connect/probe";
+declare const QODER_PROBE_PATH = "/plugins/dsh-connect-qoder-x/probe";
 /**
  * Plugin-owned PAT endpoint, one per variant.
  *
@@ -68,7 +68,7 @@ declare const QODER_PROBE_PATH = "/plugins/dsh-qoder-connect/probe";
  * it persists a credential — so it also requires the in-process key the
  * browser half receives with the status document.
  */
-declare const QODER_AUTH_PATH = "/plugins/dsh-qoder-connect/auth";
+declare const QODER_AUTH_PATH = "/plugins/dsh-connect-qoder-x/auth";
 /**
  * The international (Qoder Global) variant's own triple of routes.
  *
@@ -77,9 +77,9 @@ declare const QODER_AUTH_PATH = "/plugins/dsh-qoder-connect/auth";
  * independently, and a shared expression is one build-config drift away from
  * the desk asking a route the host never mounted.
  */
-declare const QODER_GLOBAL_STATUS_PATH = "/plugins/dsh-qoder-connect/global/status";
-declare const QODER_GLOBAL_PROBE_PATH = "/plugins/dsh-qoder-connect/global/probe";
-declare const QODER_GLOBAL_AUTH_PATH = "/plugins/dsh-qoder-connect/global/auth";
+declare const QODER_GLOBAL_STATUS_PATH = "/plugins/dsh-connect-qoder-x/global/status";
+declare const QODER_GLOBAL_PROBE_PATH = "/plugins/dsh-connect-qoder-x/global/probe";
+declare const QODER_GLOBAL_AUTH_PATH = "/plugins/dsh-connect-qoder-x/global/auth";
 /**
  * One action the PAT route accepts.
  *
@@ -472,7 +472,7 @@ declare function qoderOwnAuthPath(variant: QoderVariant): string;
  * `src/qoder/catalog.ts` is the upstream's. `upstream.ts` translates one into
  * the other.
  *
- * @module dsh-qoder-connect/catalog
+ * @module dsh-connect-qoder-x/catalog
  */
 /** One model entry the adapter exposes. */
 interface QoderModelInfo {
@@ -1298,7 +1298,7 @@ declare function registerQoderAuthRoute(ctx: Context, deps: QoderAuthRouteOption
  * This asymmetry is intentional: the host is the load-bearing half, and
  * a missing heartbeat unambiguously means the host never started.
  *
- * @module dsh-qoder-connect/host-heartbeat
+ * @module dsh-connect-qoder-x/host-heartbeat
  */
 /** Basename of the host heartbeat file inside the plugin's state directory. */
 declare const QODER_HOST_HEARTBEAT_FILENAME = ".qoder-host-heartbeat.json";
@@ -1307,7 +1307,7 @@ declare const HEARTBEAT_FORMAT_VERSION = 1;
 /** On-disk shape of the heartbeat. */
 interface QoderHostHeartbeat {
   version: typeof HEARTBEAT_FORMAT_VERSION;
-  package: 'dsh-qoder-connect';
+  package: 'dsh-connect-qoder-x';
   pluginVersion: string;
   /** Epoch milliseconds when the host registered the provider. */
   registeredAt: number;
@@ -1354,7 +1354,7 @@ declare function isHeartbeatProcessAlive(heartbeat: QoderHostHeartbeat): boolean
 //#endregion
 //#region src/index.d.ts
 /** Stable Cordis plugin name. */
-declare const name = "llm-qoder";
+declare const name = "llm-qoder-x";
 /** The model registry required before the provider can register. */
 declare const inject: string[];
 /**
