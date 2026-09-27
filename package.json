@@ -46,6 +46,7 @@
     "README.md",
     "README.en.md",
     "LICENSE",
+    "NOTICE",
     "locale/*.json"
   ],
   "license": "MIT",
