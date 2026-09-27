@@ -296,12 +296,22 @@ describe('QoderPluginCard', () => {
      * exists, and with a model that declares a larger alternative so the
      * preference checkbox renders.
      */
-    async function mountGlobal(): Promise<void> {
+    /** Switch the card's bottom pane to 「模型」. */
+const openModelsPane = async (): Promise<void> => {
+  const tab = view!.root.findAll(n =>
+    n.props.role === 'tab' && n.children.includes(en.paneModels),
+  )[0]
+  if (tab === undefined) throw new Error('no Models pane tab')
+  await act(async () => { tab.props.onClick() })
+}
+
+async function mountGlobal(): Promise<void> {
       statusReply = { ok: true, body: doc({
         models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
       }) }
       const props = { t, variant: QODER_GLOBAL_CARD } as unknown as Parameters<typeof QoderPluginCard>[0]
       await act(async () => { view = create(createElement(QoderPluginCard, props)) })
+      await openModelsPane()
     }
     /** Fire the preference checkbox, the smallest write the card offers. */
     async function firePreferenceWrite(): Promise<void> {

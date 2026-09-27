@@ -219,6 +219,26 @@ export const QUOTA_CSS = `
 .qdp-checkinRow{align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex}
 .qdp-checkinHead{border-bottom:1px solid var(--dsw-alias-border-l2);padding-bottom:6px;font-size:12px;color:var(--dsw-alias-label-tertiary);display:flex}
 .qdp-logList{flex-direction:column;gap:6px;display:flex}
+/* Usage & check-in panel: one bordered surface, usage above a divider,
+   check-in below (workbuddy's credit-panel shape, restated for qdp-). */
+.qdp-panel{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-2);padding:14px;gap:12px;display:flex;flex-direction:column}
+.qdp-panelDivide{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px}
+.qdp-panelHead{align-items:baseline;justify-content:space-between;gap:12px;display:flex}
+.qdp-panelTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
+.qdp-panelMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;font-variant-numeric:tabular-nums}
+.qdp-checkinLine{align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;display:flex}
+.qdp-checkinState{align-items:center;gap:8px;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary);display:flex;min-width:0}
+/* Bottom tab strip: two panes side by side, an underline marks the active
+   one. Quiet pills would compete with the panel headings above. */
+.qdp-paneTabs{gap:18px;border-bottom:1px solid var(--dsw-alias-border-l2);margin-top:2px;display:flex}
+.qdp-paneTab{font:inherit;font-size:13px;line-height:20px;cursor:pointer;background:0 0;border:0;border-bottom:2px solid transparent;color:var(--dsw-alias-label-tertiary);padding:6px 2px;margin-bottom:-1px}
+.qdp-paneTab:hover{color:var(--dsw-alias-label-primary)}
+.qdp-paneTab:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.qdp-paneTabActive{border-bottom-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary);font-weight:600}
+/* The merged model pane: header row carries the refresh control; each row
+   states its own context capacity beside the enable toggle. */
+.qdp-modelHead{align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;display:flex}
+.qdp-modelMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;white-space:nowrap}
 
 @media (prefers-reduced-motion:reduce){.qdp-footFill,.qdp-barFill{transition:none}}
 `

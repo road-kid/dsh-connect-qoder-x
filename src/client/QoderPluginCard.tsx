@@ -15,6 +15,8 @@ import {
 import type {
   QoderCatalogModelSnapshot,
   QoderCredentialSource,
+  QoderWebCatalog,
+  QoderWebCredits,
   QoderProbeAction,
   QoderVariantId,
   QoderWebCreditAccount,
@@ -301,63 +303,6 @@ function maxDeclaredWindow(model: QoderCatalogModelSnapshot): number | undefined
  * control is the maximum-window preference below, which flips every eligible
  * model between its default and its largest declared window.
  */
-function ContextTable({ models, t, useMaximumContextWindow, disabled, onUseMaximumContextWindow }: {
-  models: readonly QoderCatalogModelSnapshot[] | undefined
-  t: QoderPluginCardInjected['t']
-  useMaximumContextWindow?: boolean
-  disabled?: boolean
-  onUseMaximumContextWindow?: (enabled: boolean) => void
-}): React.ReactNode {
-  const known = (models ?? [])
-    .filter(model => model.contextWindow !== undefined)
-    // Largest first: the big windows are the ones a user reaches for, and the
-    // small ones are then easy to spot at the end.
-    .sort((a, b) => (b.contextWindow as number) - (a.contextWindow as number))
-  const canSelectMaximum = known.some(model => {
-    const max = maxDeclaredWindow(model)
-    return max !== undefined && max > (model.defaultContextWindow ?? model.contextWindow ?? 0)
-  })
-  const showPreference = onUseMaximumContextWindow !== undefined && (canSelectMaximum || useMaximumContextWindow === true)
-  if (known.length === 0 && !showPreference) return null
-  return (
-    <div className="qdp-list">
-      <h3 className="qdp-h3">{t('contextHeading')}</h3>
-      {showPreference && onUseMaximumContextWindow !== undefined ? (
-        <label className="qdp-contextPref">
-          <input
-            type="checkbox"
-            checked={useMaximumContextWindow === true}
-            disabled={disabled}
-            onChange={event => { onUseMaximumContextWindow(event.currentTarget.checked) }}
-          />
-          <span className="qdp-contextPrefCopy">
-            <span>{t('useMaximumContextWindow')}</span>
-            <span className="qdp-rate">{t('useMaximumContextWindowHint')}</span>
-          </span>
-        </label>
-      ) : null}
-      {known.map(model => {
-        const capacity = model.contextWindow as number
-        const max = maxDeclaredWindow(model)
-        const alternative = max !== undefined && max > capacity ? max : undefined
-        return (
-          <div key={model.id} className="qdp-label">
-            <span>{model.name}</span>
-            <span className="qdp-contextPicker">
-              <span>{formatTokens(capacity)}</span>
-              {alternative !== undefined
-                ? <span className="qdp-rate">{t('contextUpTo', { size: formatTokens(alternative) })}</span>
-                : model.defaultContextWindow !== undefined && model.defaultContextWindow < capacity
-                  ? <span className="qdp-rate">{t('contextDefault', { size: formatTokens(model.defaultContextWindow) })}</span>
-                  : null}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000 && tokens % 1_000_000 === 0) return `${tokens / 1_000_000}M`
   if (tokens >= 1_000 && tokens % 1_000 === 0) return `${tokens / 1_000}K`
@@ -367,184 +312,201 @@ function formatTokens(tokens: number): string {
 /**
  * Model visibility table with individual toggle switches and batch enable/disable controls.
  */
-function ModelSwitchTable({
-  models,
-  disabledModels = [],
-  t,
-  disabled,
-  onSetModelsEnabled,
-}: {
-  models: readonly QoderCatalogModelSnapshot[] | undefined
-  disabledModels?: readonly string[] | undefined
+/**
+ * 「用量与签到」面板:上半是剩余积分(周期汇总 + 各资源包进度条),分隔线下
+ * 是签到状态与动作(立即签到 / 刷新 / 展开日志 / 清除),签到状态直接印在
+ * 行内。workbuddy credit-panel 的结构,按本插件的信息密度重排。
+ */
+function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, clearing, checkInNotice, onCheckIn, onRefreshStatus, onClearLogs }: {
+  credits?: QoderWebCredits | undefined
+  creditsError?: string | undefined
+  checkIn?: Extract<QoderWebStatus, { status: 'signed-in' }>['checkIn'] | undefined
   t: QoderPluginCardInjected['t']
-  disabled?: boolean | undefined
-  onSetModelsEnabled: (models: readonly string[], enabled: boolean) => void
+  busy?: boolean
+  checkingIn?: boolean
+  clearing?: boolean
+  checkInNotice?: string | undefined
+  onCheckIn: () => void
+  onRefreshStatus: () => void
+  onClearLogs: () => void
 }): React.ReactNode {
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
-  const [searchQuery, setSearchQuery] = useState('')
-  const disabledSet = useMemo(() => new Set(disabledModels), [disabledModels])
-  const list = useMemo(() => models ?? [], [models])
-
-  const filteredList = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return list
-    return list.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
-  }, [list, searchQuery])
-
-  const allFilteredSelected = filteredList.length > 0 && filteredList.every(m => selected.has(m.id))
-  const toggleSelectAll = (): void => {
-    if (allFilteredSelected) {
-      const next = new Set(selected)
-      for (const m of filteredList) next.delete(m.id)
-      setSelected(next)
-    } else {
-      const next = new Set(selected)
-      for (const m of filteredList) next.add(m.id)
-      setSelected(next)
-    }
-  }
-
-  const toggleSelectOne = (id: string): void => {
-    const next = new Set(selected)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelected(next)
-  }
-
-  const handleBatch = (enabled: boolean): void => {
-    const targets = Array.from(selected)
-    if (targets.length === 0) return
-    onSetModelsEnabled(targets, enabled)
-    setSelected(new Set())
-  }
-
-  if (list.length === 0) {
-    return (
-      <div className="qdp-list">
-        <h3 className="qdp-h3">{t('modelsHeading')}</h3>
-        <p className="qdp-body">{t('modelsNoModels')}</p>
-      </div>
-    )
-  }
-
+  const [logsOpen, setLogsOpen] = useState(false)
+  const lastStateText = checkIn === undefined ? undefined : checkIn.status === 'claimed'
+    ? t('autoCheckInStatusClaimed', { amount: checkIn.amount ?? 100 })
+    : checkIn.status === 'already-claimed'
+      ? t('autoCheckInStatusAlready')
+      : checkIn.status === 'no-campaign'
+        ? t('autoCheckInStatusNoCampaign')
+        : t('autoCheckInStatusError', { message: checkIn.message ?? '' })
   return (
-    <div className="qdp-list">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h3 className="qdp-h3">{t('modelsHeading')}</h3>
-        <p className="qdp-body">{t('modelsSubtitle')}</p>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input
-          type="text"
-          value={searchQuery}
-          placeholder={t('modelsSearchPlaceholder')}
-          onChange={e => { setSearchQuery(e.currentTarget.value) }}
-          className="qdp-patInput"
-        />
-        {searchQuery ? (
+    <div className="qdp-panel">
+      {creditsError === undefined ? null : <p className="qdp-error">{t('creditsError', { message: creditsError })}</p>}
+      {credits === undefined ? null : (
+        <>
+          <div className="qdp-panelHead">
+            <h3 className="qdp-panelTitle">{t('creditsHeading')}</h3>
+            <span className="qdp-panelMeta">{credits.unlimited === true
+              ? t('creditsTotalUnlimited')
+              : t('creditsUsed', { percent: formatPercent(credits.total) })}</span>
+          </div>
+          {credits.cycleResetTime === undefined ? null : (
+            <p className="qdp-panelMeta">{t('cycleResetAt', { time: formatCycleReset(credits.cycleResetTime) })}</p>
+          )}
+          {credits.accounts
+            .filter((account: QoderWebCreditAccount) => account.remain > 0 || account.unlimited === true)
+            .map((account, index) => (
+              <CreditBar
+                key={`${account.packageName}-${String(index)}`}
+                label={account.packageName}
+                remain={account.remain}
+                size={account.size}
+                unlimited={account.unlimited}
+                packageEndTime={account.packageEndTime}
+                t={t}
+              />
+            ))}
+        </>
+      )}
+      {/*
+       * 签到区:状态行 + 动作按钮一行放下,日志可展开。原折叠头版本把「今日
+       * 是否已签」藏在了展开后的表格里;它现在直接印在状态行。
+       */}
+      <div className="qdp-panelDivide qdp-checkinLine">
+        <div className="qdp-checkinState">
+          <span className="qdp-panelTitle">{t('tabCheckIn')}</span>
+          {lastStateText === undefined ? null : <span className="qdp-panelMeta">{t('checkInLastToday', { state: lastStateText })}</span>}
+          {checkIn?.nextRunAt === undefined ? null : (
+            <span className="qdp-panelMeta">{t('checkInNextRun', { time: formatTime(checkIn.nextRunAt) })}</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button type="button" className="qdp-btn qdp-btnPrimary" disabled={busy || checkingIn} onClick={onCheckIn}>
+            {checkingIn ? t('checkInChecking') : t('checkInNow')}
+          </button>
+          <button type="button" className="qdp-btn" disabled={busy || checkingIn} onClick={onRefreshStatus}>
+            {busy ? t('checkInRefreshing') : t('checkInRefresh')}
+          </button>
           <button
             type="button"
             className="qdp-btn"
-            onClick={() => { setSearchQuery('') }}
+            disabled={busy || clearing || checkIn?.logs === undefined || checkIn.logs.length === 0}
+            onClick={() => { setLogsOpen(value => !value) }}
           >
-            {t('cancel')}
+            {logsOpen ? t('checkInLogHide') : t('checkInLogShow')}
           </button>
-        ) : null}
+          <button
+            type="button"
+            className="qdp-btn"
+            disabled={busy || clearing || checkIn?.logs === undefined || checkIn.logs.length === 0}
+            onClick={onClearLogs}
+          >
+            {clearing ? t('checkInClearing') : t('checkInClear')}
+          </button>
+        </div>
       </div>
+      {checkInNotice === undefined ? null : <p className="qdp-body">{checkInNotice}</p>}
+      {!logsOpen || checkIn?.logs === undefined ? null : (
+        <CheckInLogTable logs={checkIn.logs} t={t} />
+      )}
+    </div>
+  )
+}
 
-      {/*
-       * Batch controls live in ONE header row beside the select-all checkbox
-       * (was: a second button row competing with it). The count and the two
-       * batch actions only render once something is selected.
-       */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--dsw-alias-border-l2)' }}>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, userSelect: 'none' }}>
+/**
+ * 「模型」面板:可见性开关与每个模型的上下文容量合并到同一行(原先一个只有
+ * 一个复选框的「上下文」tab + 一个纯开关列表),刷新模型按钮挪进本栏头部
+ * (原先孤悬在账号行上)。max-window 偏好置于列表上方。
+ */
+function ModelsPane({ models, disabledModels = [], useMaximumContextWindow, catalog, t, busy, onUseMaximumContextWindow, onSetModelsEnabled, onRefreshModels }: {
+  models: readonly QoderCatalogModelSnapshot[] | undefined
+  disabledModels?: readonly string[] | undefined
+  useMaximumContextWindow?: boolean | undefined
+  catalog?: QoderWebCatalog | undefined
+  t: QoderPluginCardInjected['t']
+  busy?: boolean
+  onUseMaximumContextWindow?: (enabled: boolean) => void
+  onSetModelsEnabled: (models: readonly string[], enabled: boolean) => void
+  onRefreshModels: () => void
+}): React.ReactNode {
+  const list = models ?? []
+  const known = list
+    .filter(model => model.contextWindow !== undefined)
+    .sort((a, b) => (b.contextWindow as number) - (a.contextWindow as number))
+  const canSelectMaximum = known.some(model => {
+    const max = maxDeclaredWindow(model)
+    return max !== undefined && max > (model.defaultContextWindow ?? model.contextWindow ?? 0)
+  })
+  const showPreference = onUseMaximumContextWindow !== undefined && (canSelectMaximum || useMaximumContextWindow === true)
+  return (
+    <div className="qdp-list">
+      <div className="qdp-modelHead">
+        <h3 className="qdp-panelTitle">{t('modelsMergedHeading')}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {catalog === undefined ? null : (
+            <span className="qdp-modelMeta">
+              {catalog.source === 'live' && catalog.fetchedAt !== undefined
+                ? t('catalogLive', { time: formatTime(catalog.fetchedAt) })
+                : catalog.source === 'saved' && catalog.fetchedAt !== undefined
+                  ? t('catalogSaved', { time: formatTime(catalog.fetchedAt) })
+                  : t('catalogFallback')}
+            </span>
+          )}
+          <button type="button" className="qdp-btn" disabled={busy} onClick={onRefreshModels}>
+            {busy ? t('refreshingModels') : t('refreshModels')}
+          </button>
+        </div>
+      </div>
+      <p className="qdp-body">{t('modelsMergedHint')}</p>
+      {catalog?.error === undefined ? null : <p className="qdp-error">{t('catalogError', { message: catalog.error })}</p>}
+      {showPreference && onUseMaximumContextWindow !== undefined ? (
+        <label className="qdp-contextPref">
           <input
             type="checkbox"
-            checked={allFilteredSelected}
-            disabled={disabled || filteredList.length === 0}
-            onChange={toggleSelectAll}
+            checked={useMaximumContextWindow === true}
+            disabled={busy}
+            onChange={event => { onUseMaximumContextWindow(event.currentTarget.checked) }}
           />
-          <span>{allFilteredSelected ? t('modelsDeselectAll') : t('modelsSelectAll')}</span>
+          <span className="qdp-contextPrefCopy">
+            <span>{t('useMaximumContextWindow')}</span>
+            <span className="qdp-rate">{t('useMaximumContextWindowHint')}</span>
+          </span>
         </label>
-        {selected.size === 0 ? null : (
-          <>
-            <span className="qdp-rate">
-              {t('modelsSelectedCount', { count: selected.size })}
-            </span>
-            <span style={{ flex: 1 }} />
-            <button
-              type="button"
-              className="qdp-btn"
-              disabled={disabled}
-              onClick={() => { handleBatch(true) }}
-            >
-              {t('modelsEnableSelected')}
-            </button>
-            <button
-              type="button"
-              className="qdp-btn"
-              disabled={disabled}
-              onClick={() => { handleBatch(false) }}
-            >
-              {t('modelsDisableSelected')}
-            </button>
-          </>
-        )}
-      </div>
-
-      {filteredList.length === 0 ? (
-        <p className="qdp-body">{t('modelsNoMatch', { query: searchQuery.trim() })}</p>
+      ) : null}
+      {list.length === 0 ? (
+        <p className="qdp-body">{t('modelsNoModels')}</p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filteredList.map(model => {
-            const isModelEnabled = !disabledSet.has(model.id)
-            const isChecked = selected.has(model.id)
+        <div className="qdp-modelList">
+          {list.map(model => {
+            const isModelEnabled = !disabledModels.includes(model.id)
+            const capacity = model.contextWindow
+            const max = maxDeclaredWindow(model)
+            const alternative = capacity !== undefined && max !== undefined && max > capacity ? max : undefined
             return (
               <div
                 key={model.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  background: 'var(--dsw-alias-bg-layer-2)',
-                  gap: 12,
-                  opacity: isModelEnabled ? 1 : 0.65,
-                }}
+                className="qdp-modelRow"
+                style={{ opacity: isModelEnabled ? 1 : 0.65 }}
               >
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                <label className="qdp-modelEnable">
                   <input
                     type="checkbox"
-                    checked={isChecked}
-                    disabled={disabled}
-                    onChange={() => { toggleSelectOne(model.id) }}
+                    checked={isModelEnabled}
+                    disabled={busy}
+                    onChange={event => { onSetModelsEnabled([model.id], event.currentTarget.checked) }}
                   />
-                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontWeight: 500, fontSize: 13, color: 'var(--dsw-alias-label-primary)' }}>
-                      {model.name}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' }}>
-                      {model.id}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: disabled ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
-                    <input
-                      type="checkbox"
-                      checked={isModelEnabled}
-                      disabled={disabled}
-                      onChange={event => { onSetModelsEnabled([model.id], event.currentTarget.checked) }}
-                    />
-                    <span style={{ fontSize: 12, color: isModelEnabled ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)' }}>
-                      {isModelEnabled ? t('modelsEnabled') : t('modelsDisabled')}
-                    </span>
-                  </label>
-                </div>
+                  <span className="qdp-modelCopy">
+                    <span className="qdp-modelName">{model.name}</span>
+                    <span className="qdp-modelMeta">{model.id}</span>
+                  </span>
+                </label>
+                <span className="qdp-contextPicker">
+                  {capacity !== undefined ? <span className="qdp-modelMeta">{formatTokens(capacity)}</span> : null}
+                  {alternative !== undefined
+                    ? <span className="qdp-rate">{t('contextUpTo', { size: formatTokens(alternative) })}</span>
+                    : model.defaultContextWindow !== undefined && capacity !== undefined && model.defaultContextWindow < capacity
+                      ? <span className="qdp-rate">{t('contextDefault', { size: formatTokens(model.defaultContextWindow) })}</span>
+                      : null}
+                </span>
               </div>
             )
           })}
@@ -751,6 +713,8 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   const [checkInNotice, setCheckInNotice] = useState<string>()
   /** 「清除 PAT」的内联确认：点一次进入确认，再点一次才真正清除。 */
   const [confirmingClear, setConfirmingClear] = useState(false)
+  /** 底部双栏 tab:「用量与签到」(默认) / 「模型」。 */
+  const [pane, setPane] = useState<'usage' | 'models'>('usage')
   const mounted = useRef(true)
   const readSeq = useRef(0)
   const manualControllers = useRef(new Set<AbortController>())
@@ -1286,115 +1250,64 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 {status.jobTokenRefreshedAt === undefined
                   ? null
                   : <p className="qdp-body">{t('jobTokenRefreshed', { time: formatTime(status.jobTokenRefreshedAt) })}</p>}
-                {status.catalog === undefined
-                  ? null
-                  : <div className="qdp-row">
-                      <span className="qdp-body">
-                        {status.catalog.source === 'live' && status.catalog.fetchedAt !== undefined
-                          ? t('catalogLive', { time: formatTime(status.catalog.fetchedAt) })
-                          : status.catalog.source === 'saved' && status.catalog.fetchedAt !== undefined
-                            ? t('catalogSaved', { time: formatTime(status.catalog.fetchedAt) })
-                            : t('catalogFallback')}
-                      </span>
-                      <button type="button" className="qdp-btn" disabled={busy} onClick={() => { void refreshModels() }}>
-                        {busy ? t('refreshingModels') : t('refreshModels')}
-                      </button>
-                    </div>}
-                {status.catalog?.error === undefined
-                  ? null
-                  : <p className="qdp-error">{t('catalogError', { message: status.catalog.error })}</p>}
+                {/* Catalog freshness + its refresh control live in the Models pane. */}
                 {/*
-                 * Credits: the cycle summary AND the per-package bars in one
-                 * block (was: summary on a "status" tab, bars on a "details"
-                 * tab — the same question split in two).
+                 * Two panes, switched by the tab strip at the bottom of the
+                 * signed-in arm: 「用量与签到」 (credits + check-in on one
+                 * bordered panel, workbuddy's credit-panel shape) and 「模型」
+                 * (visibility + per-model context capacity + the refresh
+                 * control that used to live on the account row). Rendering
+                 * keeps BOTH panes mounted so tab switches never refetch.
                  */}
-                {status.creditsError === undefined ? null
-                  : <p className="qdp-error">{t('creditsError', { message: status.creditsError })}</p>}
-                {status.credits === undefined ? null : (
-                  <div className="qdp-list">
-                    <div className="qdp-row">
-                      <h3 className="qdp-h3">{t('creditsHeading')}</h3>
-                      <span className="qdp-body">{status.credits.unlimited === true
-                        ? t('creditsTotalUnlimited')
-                        : t('creditsUsed', { percent: formatPercent(status.credits.total) })}</span>
-                    </div>
-                    {status.credits.cycleResetTime === undefined ? null : (
-                      <p className="qdp-body">
-                        {t('cycleResetAt', { time: formatCycleReset(status.credits.cycleResetTime) })}
-                      </p>
-                    )}
-                    {status.credits.accounts
-                      .filter((account: QoderWebCreditAccount) => account.remain > 0 || account.unlimited === true)
-                      .map((account, index) => (
-                        <CreditBar
-                          key={`${account.packageName}-${String(index)}`}
-                          label={account.packageName}
-                          remain={account.remain}
-                          size={account.size}
-                          unlimited={account.unlimited}
-                          packageEndTime={account.packageEndTime}
-                          t={t}
-                        />
-                      ))}
-                  </div>
-                )}
-                {/*
-                 * Models: the max-window preference rides ABOVE the visibility
-                 * list (was: a whole "context" tab whose only control was this
-                 * preference — a tab for one checkbox).
-                 */}
-                <ContextTable
-                  models={status.models}
-                  t={t}
-                  disabled={busy}
-                  {...status.useMaximumContextWindow === undefined ? {} : { useMaximumContextWindow: status.useMaximumContextWindow }}
-                  onUseMaximumContextWindow={(enabled: boolean) => { void control({ action: 'set-maximum-context-window', enabled }) }}
-                />
-                <ModelSwitchTable
-                  models={status.models}
-                  disabledModels={status.disabledModels}
-                  t={t}
-                  disabled={busy}
-                  onSetModelsEnabled={(models, enabled) => {
-                    void control({ action: 'set-models-enabled', models, enabled })
-                  }}
-                />
-                {/*
-                 * Check-in log: collapsed by default. The action buttons stay
-                 * reachable in the section header row, so checking in needs no
-                 * expand; the log table only unfolds when there is something
-                 * to read.
-                 */}
-                <CardSection
-                  title={t('tabCheckIn')}
-                  actions={
-                    <>
-                      <button type="button" className="qdp-btn" disabled={status.status !== 'signed-in' || busy || checkingIn} onClick={() => { void manualCheckIn() }}>
-                        {checkingIn ? t('checkInChecking') : t('checkInNow')}
-                      </button>
-                      <button type="button" className="qdp-btn" disabled={busy || checkingIn} onClick={() => { void manualRefresh() }}>
-                        {busy ? t('checkInRefreshing') : t('checkInRefresh')}
-                      </button>
-                      <button type="button" className="qdp-btn" disabled={busy || clearingLogs || !status.checkIn?.logs || status.checkIn.logs.length === 0} onClick={() => { void clearCheckInLogs() }}>
-                        {clearingLogs ? t('checkInClearing') : t('checkInClear')}
-                      </button>
-                    </>
-                  }
-                >
-                  <CheckInLogTable
-                    logs={status.checkIn?.logs}
+                <div className="qdp-paneTabs" role="tablist" aria-label={t('paneUsage')}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={pane === 'usage'}
+                    className={pane === 'usage' ? 'qdp-paneTab qdp-paneTabActive' : 'qdp-paneTab'}
+                    onClick={() => { setPane('usage') }}
+                  >
+                    {t('paneUsage')}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={pane === 'models'}
+                    className={pane === 'models' ? 'qdp-paneTab qdp-paneTabActive' : 'qdp-paneTab'}
+                    onClick={() => { setPane('models') }}
+                  >
+                    {t('paneModels')}
+                  </button>
+                </div>
+                {pane === 'usage' ? (
+                  <UsageCheckInPanel
+                    credits={status.credits}
+                    creditsError={status.creditsError}
+                    checkIn={status.checkIn}
                     t={t}
                     busy={busy}
                     checkingIn={checkingIn}
                     clearing={clearingLogs}
-                    disabled={status.status !== 'signed-in'}
-                    {...checkInNotice === undefined ? {} : { notice: checkInNotice }}
-                    {...status.checkIn?.nextRunAt === undefined ? {} : { nextRun: status.checkIn.nextRunAt }}
+                    checkInNotice={checkInNotice}
                     onCheckIn={() => { void manualCheckIn() }}
-                    onRefresh={() => { void manualRefresh() }}
-                    onClear={() => { void clearCheckInLogs() }}
+                    onRefreshStatus={() => { void manualRefresh() }}
+                    onClearLogs={() => { void clearCheckInLogs() }}
                   />
-                </CardSection>
+                ) : (
+                  <ModelsPane
+                    models={status.models}
+                    disabledModels={status.disabledModels}
+                    useMaximumContextWindow={status.useMaximumContextWindow}
+                    catalog={status.catalog}
+                    t={t}
+                    busy={busy}
+                    onUseMaximumContextWindow={(enabled: boolean) => { void control({ action: 'set-maximum-context-window', enabled }) }}
+                    onSetModelsEnabled={(models, enabled) => {
+                      void control({ action: 'set-models-enabled', models, enabled })
+                    }}
+                    onRefreshModels={() => { void refreshModels() }}
+                  />
+                )}
               </>
             : null}
           {status?.status === 'signed-out'

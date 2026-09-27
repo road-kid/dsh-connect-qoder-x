@@ -109,6 +109,15 @@ describe('Qoder plugin card', () => {
     await act(async () => { view!.root.findAllByType('button')[0]!.props.onClick() })
   }
 
+  /** Switch the signed-in body's bottom pane (「用量与签到」 / 「模型」). */
+  const openPane = async (label: string): Promise<void> => {
+    const tab = view!.root.findAll(n =>
+      n.props.role === 'tab' && n.children.includes(label),
+    )[0]
+    if (tab === undefined) throw new Error(`no pane tab "${label}"`)
+    await act(async () => { tab.props.onClick() })
+  }
+
   const buttonLabels = (): string[] => view!.root.findAllByType('button').map(node => node.children.join(''))
   const press = async (label: string, nth = 0): Promise<void> => {
     const matches = view!.root.findAllByType('button').filter(entry => entry.children.join('') === label)
@@ -276,7 +285,8 @@ describe('Qoder plugin card', () => {
     }
     for (const variant of [undefined, QODER_GLOBAL_CARD]) {
       await mount(variant)
-      // The preference renders inline in the model area — no tab to press.
+      // The preference lives in the Models pane.
+      await openPane(en.paneModels)
       const checkbox = inputs().find(input => input.props.type === 'checkbox')
       expect(checkbox).toBeDefined()
       await act(async () => { checkbox!.props.onChange({ currentTarget: { checked: true } }) })
@@ -297,6 +307,7 @@ describe('Qoder plugin card', () => {
       models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
     }
     await mount()
+    await openPane(en.paneModels)
     expect(view!.root.findAllByType('select')).toHaveLength(0)
     const tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain('200K')
@@ -323,12 +334,15 @@ describe('Qoder plugin card', () => {
       ],
     }
     await mount()
-    // Credits and context render on the one page — no tabs to press.
-    const tree = JSON.stringify(view!.toJSON())
+    // The Usage pane carries the cycle summary and the package bars.
+    let tree = JSON.stringify(view!.toJSON())
     // The exhausted package is dropped; the unknown-size one renders unlimited copy.
     expect(tree).toContain(t('exactRemaining', { remain: '75', size: '100' }))
     expect(tree).not.toContain('组织资源包')
     expect(tree).toContain(en.unlimitedQuota)
+    // The Models pane carries context capacities beside the visibility toggles.
+    await openPane(en.paneModels)
+    tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain('200K')
     expect(tree).toContain(t('contextUpTo', { size: '1M' }))
   })
@@ -341,6 +355,7 @@ describe('Qoder plugin card', () => {
       models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
     }
     await mount(QODER_GLOBAL_CARD)
+    await openPane(en.paneModels)
     const checkbox = inputs().find(input => input.props.type === 'checkbox')
     expect(checkbox).toBeDefined()
     await act(async () => { checkbox!.props.onChange({ currentTarget: { checked: true } }) })

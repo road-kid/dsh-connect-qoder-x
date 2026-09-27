@@ -144,10 +144,11 @@ describe('Unified Qoder Plugin Card', () => {
     // intro, which is unique, plus the structural absence of the disclosure.
     expect(json).not.toContain(en.unifiedIntro)
     // No DISCLOSURE chrome around the whole body: the card never renders a
-    // header claiming the page is collapsed. The two collapsible SECTIONS
-    // (check-in log, sidebar settings) each own an honest aria-expanded= false.
-    const foldables = view!.root.findAllByProps({ 'aria-expanded': false })
-    expect(foldables.length).toBeGreaterThanOrEqual(2)
+    // header claiming the page is collapsed. The collapsible settings section
+    // owns an honest aria-expanded=false; the two bottom panes own aria-selected.
+    expect(view!.root.findAllByProps({ 'aria-expanded': false }).length).toBeGreaterThanOrEqual(1)
+    // One selected variant tab (China) + one selected pane (Usage).
+    expect(view!.root.findAllByProps({ 'aria-selected': true })).toHaveLength(2)
     expect(view!.root.findAllByProps({ 'aria-expanded': true })).toHaveLength(0)
   })
 
@@ -489,7 +490,7 @@ describe('Unified Qoder Plugin Card', () => {
     act(() => contentRenderer?.unmount())
   })
 
-  it('renders the check-in log section with its header actions when logs exist', async () => {
+  it('renders the check-in state and its actions on the Usage pane when logs exist', async () => {
     request.mockImplementation(async (url: string) => {
       const path = String(url)
       if (path === QODER_STATUS_PATH) {
@@ -532,15 +533,21 @@ describe('Unified Qoder Plugin Card', () => {
       } as any))
     })
 
-    // The check-in section is a collapsible section now, not a tab. Its
-    // action buttons sit in the section header, reachable while folded.
-    await expandSection(en.tabCheckIn)
+    // Check-in lives on the Usage pane's own line: state text and action
+    // buttons are visible without any expansion.
 
-    // Verify check-in log entries rendered
+    // The state line states today's claim (+100) without any expansion.
+    const states = view!.root.findAll(n => typeof n.props.children === 'string' && n.props.children.includes('+100 Credits'))
+    expect(states.length).toBeGreaterThanOrEqual(1)
+
+    // Expand the log and verify its entries rendered
+    const logsBtn = view!.root.findAll(n => n.props.onClick && n.children.includes(en.checkInLogShow))[0]
+    expect(logsBtn).toBeDefined()
+    await act(async () => { logsBtn!.props.onClick() })
     const amounts = view!.root.findAll(n => n.children.includes('+100'))
     expect(amounts.length).toBeGreaterThanOrEqual(1)
 
-    // Verify action buttons exist in check-in log panel (check in now, refresh, clear)
+    // Verify action buttons exist on the check-in line (check in now, refresh, clear)
     const checkInBtn = view!.root.findAll(n => n.children.includes(en.checkInNow))
     expect(checkInBtn.length).toBeGreaterThanOrEqual(1)
     const refreshBtn = view!.root.findAll(n => n.children.includes(en.checkInRefresh))
