@@ -1,12 +1,25 @@
 import { readFileSync } from 'node:fs'
 import type { UserConfig } from 'tsdown'
 
-const PLUGIN_ID = 'dsh-qoder-connect'
+/**
+ * The package manifest, read once for both identity values the build stamps in.
+ *
+ * The bundle's registration id MUST equal the package name: the client module
+ * system loads a bundle for a boot-graph row whose id is the PACKAGE NAME and
+ * then asserts `factories.has(id)` — a bundle that registers under any other id
+ * fails with `loaded without registering "<pkg>" via __ModuleLoader__.load`.
+ * Reading it here rather than repeating the literal is what keeps the two in
+ * step; the hardcoded copy is exactly how this fork shipped a bundle
+ * registering as `dsh-qoder-connect` while the manifest said otherwise.
+ */
+const MANIFEST = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { name: string, version: string }
+
+const PLUGIN_ID = MANIFEST.name
 
 /** Read the npm version once so the build injects it into src/version.ts. */
-const PACKAGE_VERSION = JSON.parse(
-  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
-).version as string
+const PACKAGE_VERSION = MANIFEST.version
 
 /** Build-time define map; `src/version.ts` reads `__DSH_QODER_VERSION__`. */
 const VERSION_DEFINE = { __DSH_QODER_VERSION__: JSON.stringify(PACKAGE_VERSION) }

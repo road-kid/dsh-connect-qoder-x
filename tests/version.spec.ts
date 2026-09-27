@@ -51,4 +51,33 @@ describe('package version sync', () => {
       `no built bundle declares QODER_CONNECT_VERSION as "${pkg.version}" — rebuild before committing or publishing`,
     ).not.toHaveLength(0)
   })
+
+  /**
+   * The browser bundle must register under the PACKAGE NAME, not under a literal
+   * copied into the build config.
+   *
+   * The client module system loads a bundle for a boot-graph row whose id IS the
+   * package name, then asserts it registered that id:
+   * `client-modules/src/client/system.ts` reports
+   * `loaded without registering "<id>" via __ModuleLoader__.load` and throws
+   * `could not load "<id>"` when the factory map has no such key. So a bundle
+   * registering under any other name is not merely mislabelled — it never
+   * activates, and the whole card disappears from the page.
+   *
+   * This is a real regression this repo shipped: `tsdown.config.ts` carried its
+   * own `PLUGIN_ID = 'dsh-qoder-connect'` literal, which the rename left behind
+   * while package.json moved on. The config now derives the id from the manifest;
+   * this test is what keeps the two from drifting apart again.
+   */
+  it('built client bundle registers under the package name', () => {
+    const libDir = new URL('../lib/', import.meta.url)
+    if (!existsSync(libDir)) return
+    const pkg = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { name: string }
+    const client = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+    const registration = /__ModuleLoader__\.load\(\{\s*id:\s*"([^"]+)"/.exec(client)
+    expect(registration, 'lib/client.js declares no __ModuleLoader__.load id').not.toBeNull()
+    expect(registration?.[1]).toBe(pkg.name)
+  })
 })

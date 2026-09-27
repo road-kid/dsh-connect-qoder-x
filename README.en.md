@@ -75,9 +75,25 @@ The card no longer draws its own disclosure shell (the page supplies the title, 
 
 Prerequisites:
 
-- DSH core `0.1.7-rc.2` or newer;
+- DSH core **`>=0.1.7-rc.1 <0.2.0`**;
 - Node.js `^22.19.0 || >=24.0.0` (per `package.json` engines);
 - your own Qoder account and at least one Personal Access Token.
+
+> **Supported version range (narrower than upstream — please read)**
+>
+> Upstream `dsh-qoder-connect` spans **two host lines**: 0.1.5/0.1.6 through
+> `settings.plugin.item` and 0.1.7 through the shared `plugin-settings.item`.
+> This fork was rewritten against the 0.1.7 seats, so it supports **0.1.7 and
+> later only** — a deliberate trade-off of the port, not a defect.
+>
+> On **0.1.5 / 0.1.6**: the **host half keeps working** (models, PAT, catalog,
+> check-in), but **the settings card does not appear**, because those versions
+> have no `plugins.row.config` seat. Use upstream if you need the older line.
+>
+> The floor is declared through the `@deepseek-ai/dsh-*` `peerDependencies`
+> ranges — the field DSH actually validates at install time. `app-boot`'s
+> compatibility preflight reads peer dependencies only; it does not read
+> `engines.dsh`.
 
 ```sh
 # From GitHub
