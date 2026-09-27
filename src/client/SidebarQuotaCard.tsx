@@ -608,7 +608,9 @@ export function QuotaDashboard(props: QuotaDashboardProps): React.ReactNode {
                           />
                         </span>
                       </td>
-                      <td className="qdp-expiry">{row.packageEndTime ?? t('quotaNoExpiry')}</td>
+                      <td className="qdp-expiry" title={row.packageEndTime ?? t('quotaNoExpiry')}>
+                        {row.packageEndTime ?? '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
