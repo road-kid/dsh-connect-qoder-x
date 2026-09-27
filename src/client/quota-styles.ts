@@ -165,5 +165,60 @@ export const QUOTA_CSS = `
 .qdp-tab:hover:not(.qdp-tabActive){color:var(--dsw-alias-label-primary)}
 .qdp-tabActive{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-brand-primary)}
 
+/* ------------------------------------------------- plugin card */
+/* The Plugins-page configuration card. One rule set replaces the card's
+   ~30 inline CSSProperties objects: same declarations, but themeable in one
+   place, shareable between the unified card and any future surface, and
+   free of the per-object fallback drift (identical rgba hexes had been
+   restated by hand across objects). Dynamic values — progress widths,
+   active-tab state, status-dot colour — stay inline on the element. */
+.qdp-card{list-style:none;border-width:.5px;border-style:solid;border-color:var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-3);transition:border-color .16s,background .16s}
+.qdp-card:hover{border-color:var(--dsw-alias-label-dimmed)}
+.qdp-cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}
+.qdp-cardBody{border-top:.5px solid var(--dsw-alias-border-l2);margin:0 16px;padding:12px 0 8px;display:flex;flex-direction:column;gap:18px}
+.qdp-h3{margin:0;font-size:13px;line-height:1.5;font-weight:600;color:var(--dsw-alias-label-primary)}
+.qdp-body{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
+.qdp-error{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
+.qdp-row{align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;display:flex}
+.qdp-status{align-items:center;gap:8px;font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary);display:flex}
+.qdp-list{flex-direction:column;gap:18px;padding-top:2px;display:flex}
+.qdp-group{flex-direction:column;gap:10px;display:flex}
+.qdp-label{justify-content:space-between;gap:12px;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary);display:flex}
+.qdp-rate{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
+/* Buttons. Primary fills the row's main action; danger is graded: quiet
+   outline while armed, solid error fill once confirmed. */
+.qdp-btn{box-sizing:border-box;padding:5px 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:1.5;cursor:pointer}
+.qdp-btn:disabled{opacity:.4;cursor:default}
+.qdp-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.qdp-btnPrimary{border-color:var(--dsw-alias-button-primary-fill);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}
+.qdp-btnDanger{border-color:var(--dsw-alias-state-error-primary);background:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-label-primary-foreground)}
+.qdp-btnDangerQuiet{color:var(--dsw-alias-state-error-primary)}
+/* PAT entry row and its input. */
+.qdp-patRow{align-items:center;gap:8px;flex-wrap:wrap;display:flex}
+.qdp-patInput{box-sizing:border-box;flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.5}
+/* Collapsible section inside the card body. */
+.qdp-section{flex-direction:column;border-top:1px solid var(--dsw-alias-border-l2);padding-top:10px;display:flex}
+.qdp-sectionHeadRow{align-items:center;gap:8px;display:flex}
+.qdp-sectionHead{font:inherit;color:var(--dsw-alias-label-secondary);text-align:left;cursor:pointer;background:0 0;border:0;padding:4px 0;align-items:center;gap:8px;display:flex}
+.qdp-sectionHead:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.qdp-sectionTitle{font-size:13px;font-weight:600;line-height:1.5}
+.qdp-sectionActions{align-items:center;gap:6px;margin-left:auto;display:flex}
+.qdp-sectionBody{flex-direction:column;gap:12px;padding-top:10px;display:flex}
+/* The one level of variant tabs. */
+.qdp-seg{align-items:center;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:3px;gap:4px;margin:14px 0 16px;display:flex}
+.qdp-segItem{flex:1;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:6px;padding:6px 12px;font:inherit;font-size:13px;line-height:18px;cursor:pointer;appearance:none;outline:none;color:var(--dsw-alias-label-tertiary);transition:all .16s ease;display:flex}
+.qdp-segItem:hover{color:var(--dsw-alias-label-primary)}
+.qdp-segItem:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.qdp-segItemActive{border-color:var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-weight:500}
+/* Context preference + model rows. */
+.qdp-contextPref{align-items:flex-start;gap:9px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5;padding:10px 12px;display:flex}
+.qdp-contextPrefCopy{flex-direction:column;gap:2px;display:flex}
+.qdp-contextPicker{align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;display:flex}
+.qdp-modelRow{align-items:center;justify-content:space-between;gap:12px;border-radius:6px;background:var(--dsw-alias-bg-layer-2);padding:8px 10px;display:flex}
+.qdp-track{height:8px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-bg-layer-2)}
+.qdp-checkinRow{align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex}
+.qdp-checkinHead{border-bottom:1px solid var(--dsw-alias-border-l2);padding-bottom:6px;font-size:12px;color:var(--dsw-alias-label-tertiary);display:flex}
+.qdp-logList{flex-direction:column;gap:6px;display:flex}
+
 @media (prefers-reduced-motion:reduce){.qdp-footFill,.qdp-barFill{transition:none}}
 `

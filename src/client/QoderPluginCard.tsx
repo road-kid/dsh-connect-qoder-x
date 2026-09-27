@@ -118,207 +118,41 @@ const POLL_INTERVAL_MS = 60_000
  * values, so a card from this plugin sits in the list beside a built-in one
  * without reading as a different kind of object.
  */
-const cardStyle: CSSProperties = {
-  listStyle: 'none',
-  /*
-   * Border as longhands, never the `border` shorthand.
-   *
-   * The hover and open states below override the colour, and React applies an
-   * override by assigning the property and clearing it by assigning `''`. That
-   * clear is what breaks a shorthand: the shorthand was expanded by the CSSOM
-   * into longhands, React then considers `border` unchanged and never re-applies
-   * it, and clearing `border-color` leaves the whole border unset — so it falls
-   * back to `currentColor` and the card grows a near-black outline. Declaring the
-   * three longhands keeps the colour always present in the style object, so React
-   * assigns a value on every render instead of ever clearing one.
-   */
-  borderWidth: '0.5px',
-  borderStyle: 'solid',
-  borderColor: 'var(--dsw-alias-border-l4)',
-  borderRadius: 16,
-  background: 'var(--dsw-alias-bg-layer-3)',
-  transition: 'border-color .16s, background .16s',
-}
 /** Hover, matching the built-in card's `:hover`. Inline styles cannot express a pseudo-class. */
-const cardHoverStyle: CSSProperties = { borderColor: 'var(--dsw-alias-label-dimmed)' }
 /**
  * The page face: the card is no longer collapsible, so it renders in the "open"
  * treatment unconditionally — the tone the built-in card used while expanded.
  */
-const cardOpenStyle: CSSProperties = {
-  background: 'var(--dsw-alias-bg-layer-2)',
-  borderColor: 'var(--dsw-alias-label-dimmed)',
-}
-const descriptionStyle: CSSProperties = { fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' }
 
 /**
  * The page body's inner separator. The card is now the whole page, so this rule
  * sits at the top of the body rather than under a disclosure header.
  */
-const cardBodyStyle: CSSProperties = {
-  borderTop: '.5px solid var(--dsw-alias-border-l2)',
-  margin: '0 16px',
-  padding: '12px 0 8px',
-}
 
-const bodyStyle: CSSProperties = { margin: 0, fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' }
-const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }
-const statusStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, lineHeight: 1.5, color: 'var(--dsw-alias-label-primary)' }
 /** The built-in secondary button: transparent, hairline border, 8px radius. */
-const buttonStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  padding: '5px 14px',
-  border: '1px solid var(--dsw-alias-border-l2)',
-  borderRadius: 8,
-  background: 'transparent',
-  color: 'var(--dsw-alias-label-secondary)',
-  font: 'inherit',
-  fontSize: 13,
-  lineHeight: 1.5,
-  cursor: 'pointer',
-}
-const errorStyle: CSSProperties = { ...bodyStyle, color: 'var(--dsw-alias-state-error-primary)' }
-const quotaListStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 2 }
-const quotaGroupStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 10 }
-const quotaTitleStyle: CSSProperties = { margin: 0, fontSize: 13, lineHeight: 1.5, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' }
-const quotaLabelStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-secondary)' }
-const modelRateStyle: CSSProperties = { fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' }
-const contextPreferenceStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 9,
-  padding: '10px 12px',
-  border: '.5px solid var(--dsw-alias-border-l4)',
-  borderRadius: 8,
-  background: 'var(--dsw-alias-bg-layer-3)',
-  color: 'var(--dsw-alias-label-primary)',
-  fontSize: 13,
-  lineHeight: 1.5,
-}
-const contextPreferenceCopyStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 2 }
-const contextPickerRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'flex-end',
-  gap: 8,
-  flexWrap: 'wrap',
-}
-const progressTrackStyle: CSSProperties = { height: 8, overflow: 'hidden', borderRadius: 999, background: 'var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, 0.08))' }
 
 /**
  * The PAT entry row: the password field takes the row's flexible width, the
  * Save button keeps its own, and the whole block sits inside the card body
  * without a nested box (the same rule the settings rows follow).
  */
-const patRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }
-const patInputStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  flex: 1,
-  minWidth: 200,
-  padding: '6px 10px',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'var(--dsw-alias-border-l2)',
-  borderRadius: 8,
-  background: 'var(--dsw-alias-bg-layer-2)',
-  color: 'var(--dsw-alias-label-primary)',
-  font: 'inherit',
-  fontSize: 13,
-  lineHeight: 1.5,
-}
 
 /* ---- Collapsible section (settings, check-in log) ---- */
-const sectionStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  borderTop: '1px solid var(--dsw-alias-border-l2)',
-  paddingTop: 10,
-}
-const sectionHeadStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '4px 0',
-  background: 'transparent',
-  border: 0,
-  font: 'inherit',
-  cursor: 'pointer',
-  textAlign: 'left',
-  color: 'var(--dsw-alias-label-secondary)',
-}
-const sectionTitleStyle: CSSProperties = { fontSize: 13, fontWeight: 600, lineHeight: 1.5 }
-const sectionHeadRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 }
-const sectionActionsStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }
-const sectionBodyStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 10 }
 
 /**
  * Primary action of the inline confirmation and of the PAT save. Fill and text
  * colour come from the theme as a pair: `brand-primary` is a light accent here,
  * so pairing it with a hardcoded white would render white-on-white.
  */
-const primaryButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'var(--dsw-alias-button-primary-fill)',
-  background: 'var(--dsw-alias-button-primary-fill)',
-  color: 'var(--dsw-alias-label-primary-foreground)',
-}
 
 /**
  * The destructive action's tone: solid error fill while confirmed, and a
  * quiet outline before that. Both derive from the error token pair so the
  * theme stays the single source of the colour.
  */
-const dangerButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  borderColor: 'var(--dsw-alias-state-error-primary)',
-  background: 'var(--dsw-alias-state-error-primary)',
-  color: 'var(--dsw-alias-label-primary-foreground)',
-}
-const quietDangerButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  color: 'var(--dsw-alias-state-error-primary)',
-}
 
 /* ---- Segmented Tab Switcher styles (Figure 1) ---- */
-const segmentedContainerStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  background: 'var(--dsw-alias-bg-layer-1, rgba(20, 20, 20, 0.6))',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.08))',
-  borderRadius: 8,
-  padding: 3,
-  gap: 4,
-  marginTop: 14,
-  marginBottom: 16,
-}
 
-function segmentedTabItemStyle(active: boolean): CSSProperties {
-  return {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: '6px 12px',
-    borderRadius: 6,
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: active ? 'var(--dsw-alias-border-l4, rgba(255, 255, 255, 0.18))' : 'transparent',
-    background: active ? 'var(--dsw-alias-bg-layer-3, rgba(255, 255, 255, 0.08))' : 'transparent',
-    color: active ? 'var(--dsw-alias-label-primary, #fff)' : 'var(--dsw-alias-label-tertiary, #8c8c8c)',
-    fontWeight: active ? 500 : 400,
-    fontSize: 13,
-    lineHeight: '18px',
-    cursor: 'pointer',
-    appearance: 'none',
-    outline: 'none',
-    transition: 'all .16s ease',
-  }
-}
 
 function progressFillStyle(percent: number): CSSProperties {
   return {
@@ -387,17 +221,17 @@ function CreditBar({ label, remain, size, unlimited, packageEndTime, t }: {
 }): React.ReactNode {
   const expiry = packageEndTime === undefined
     ? null
-    : <p style={modelRateStyle}>{t('quotaExpires')} {formatCycleReset(packageEndTime)}</p>
+    : <p className="qdp-rate">{t('quotaExpires')} {formatCycleReset(packageEndTime)}</p>
   if (unlimited === true) {
     const quotaText = t('unlimitedQuota')
     return (
-      <div style={quotaGroupStyle}>
-        <div style={quotaLabelStyle}>
+      <div className="qdp-group">
+        <div className="qdp-label">
           <span>{label}</span>
           <span>{quotaText}</span>
         </div>
         <div
-          style={progressTrackStyle}
+          className="qdp-track"
           role="progressbar"
           aria-label={label}
           /*
@@ -407,7 +241,7 @@ function CreditBar({ label, remain, size, unlimited, packageEndTime, t }: {
            */
           aria-valuetext={quotaText}
         />
-        <p style={bodyStyle}>{quotaText}</p>
+        <p className="qdp-body">{quotaText}</p>
         {expiry}
       </div>
     )
@@ -421,13 +255,13 @@ function CreditBar({ label, remain, size, unlimited, packageEndTime, t }: {
     ? t('percentUnknown')
     : t('percentRemaining', { percent: formatPercent(percent) })
   return (
-    <div style={quotaGroupStyle}>
-      <div style={quotaLabelStyle}>
+    <div className="qdp-group">
+      <div className="qdp-label">
         <span>{label}</span>
         <span>{display}</span>
       </div>
       <div
-        style={progressTrackStyle}
+        className="qdp-track"
         role="progressbar"
         aria-label={label}
         /*
@@ -441,7 +275,7 @@ function CreditBar({ label, remain, size, unlimited, packageEndTime, t }: {
       >
         {percent === undefined ? null : <div style={progressFillStyle(percent)} />}
       </div>
-      <p style={bodyStyle}>{detail}</p>
+      <p className="qdp-body">{detail}</p>
       {expiry}
     </div>
   )
@@ -486,19 +320,19 @@ function ContextTable({ models, t, useMaximumContextWindow, disabled, onUseMaxim
   const showPreference = onUseMaximumContextWindow !== undefined && (canSelectMaximum || useMaximumContextWindow === true)
   if (known.length === 0 && !showPreference) return null
   return (
-    <div style={quotaListStyle}>
-      <h3 style={quotaTitleStyle}>{t('contextHeading')}</h3>
+    <div className="qdp-list">
+      <h3 className="qdp-h3">{t('contextHeading')}</h3>
       {showPreference && onUseMaximumContextWindow !== undefined ? (
-        <label style={contextPreferenceStyle}>
+        <label className="qdp-contextPref">
           <input
             type="checkbox"
             checked={useMaximumContextWindow === true}
             disabled={disabled}
             onChange={event => { onUseMaximumContextWindow(event.currentTarget.checked) }}
           />
-          <span style={contextPreferenceCopyStyle}>
+          <span className="qdp-contextPrefCopy">
             <span>{t('useMaximumContextWindow')}</span>
-            <span style={modelRateStyle}>{t('useMaximumContextWindowHint')}</span>
+            <span className="qdp-rate">{t('useMaximumContextWindowHint')}</span>
           </span>
         </label>
       ) : null}
@@ -507,14 +341,14 @@ function ContextTable({ models, t, useMaximumContextWindow, disabled, onUseMaxim
         const max = maxDeclaredWindow(model)
         const alternative = max !== undefined && max > capacity ? max : undefined
         return (
-          <div key={model.id} style={quotaLabelStyle}>
+          <div key={model.id} className="qdp-label">
             <span>{model.name}</span>
-            <span style={contextPickerRowStyle}>
+            <span className="qdp-contextPicker">
               <span>{formatTokens(capacity)}</span>
               {alternative !== undefined
-                ? <span style={modelRateStyle}>{t('contextUpTo', { size: formatTokens(alternative) })}</span>
+                ? <span className="qdp-rate">{t('contextUpTo', { size: formatTokens(alternative) })}</span>
                 : model.defaultContextWindow !== undefined && model.defaultContextWindow < capacity
-                  ? <span style={modelRateStyle}>{t('contextDefault', { size: formatTokens(model.defaultContextWindow) })}</span>
+                  ? <span className="qdp-rate">{t('contextDefault', { size: formatTokens(model.defaultContextWindow) })}</span>
                   : null}
             </span>
           </div>
@@ -586,18 +420,18 @@ function ModelSwitchTable({
 
   if (list.length === 0) {
     return (
-      <div style={quotaListStyle}>
-        <h3 style={quotaTitleStyle}>{t('modelsHeading')}</h3>
-        <p style={descriptionStyle}>{t('modelsNoModels')}</p>
+      <div className="qdp-list">
+        <h3 className="qdp-h3">{t('modelsHeading')}</h3>
+        <p className="qdp-body">{t('modelsNoModels')}</p>
       </div>
     )
   }
 
   return (
-    <div style={quotaListStyle}>
+    <div className="qdp-list">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h3 style={quotaTitleStyle}>{t('modelsHeading')}</h3>
-        <p style={descriptionStyle}>{t('modelsSubtitle')}</p>
+        <h3 className="qdp-h3">{t('modelsHeading')}</h3>
+        <p className="qdp-body">{t('modelsSubtitle')}</p>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -606,12 +440,12 @@ function ModelSwitchTable({
           value={searchQuery}
           placeholder={t('modelsSearchPlaceholder')}
           onChange={e => { setSearchQuery(e.currentTarget.value) }}
-          style={patInputStyle}
+          className="qdp-patInput"
         />
         {searchQuery ? (
           <button
             type="button"
-            style={buttonStyle}
+            className="qdp-btn"
             onClick={() => { setSearchQuery('') }}
           >
             {t('cancel')}
@@ -636,13 +470,13 @@ function ModelSwitchTable({
         </label>
         {selected.size === 0 ? null : (
           <>
-            <span style={modelRateStyle}>
+            <span className="qdp-rate">
               {t('modelsSelectedCount', { count: selected.size })}
             </span>
             <span style={{ flex: 1 }} />
             <button
               type="button"
-              style={buttonStyle}
+              className="qdp-btn"
               disabled={disabled}
               onClick={() => { handleBatch(true) }}
             >
@@ -650,7 +484,7 @@ function ModelSwitchTable({
             </button>
             <button
               type="button"
-              style={buttonStyle}
+              className="qdp-btn"
               disabled={disabled}
               onClick={() => { handleBatch(false) }}
             >
@@ -661,7 +495,7 @@ function ModelSwitchTable({
       </div>
 
       {filteredList.length === 0 ? (
-        <p style={descriptionStyle}>{t('modelsNoMatch', { query: searchQuery.trim() })}</p>
+        <p className="qdp-body">{t('modelsNoMatch', { query: searchQuery.trim() })}</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filteredList.map(model => {
@@ -753,13 +587,13 @@ function CheckInLogTable({
   nextRun?: number | undefined
 }): React.ReactNode {
   return (
-    <div style={quotaListStyle}>
+    <div className="qdp-list">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={quotaTitleStyle}>{t('tabCheckIn')}</h3>
+        <h3 className="qdp-h3">{t('tabCheckIn')}</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
             type="button"
-            style={buttonStyle}
+            className="qdp-btn"
             disabled={disabled || busy || checkingIn}
             onClick={onCheckIn}
           >
@@ -767,7 +601,7 @@ function CheckInLogTable({
           </button>
           <button
             type="button"
-            style={buttonStyle}
+            className="qdp-btn"
             disabled={busy || checkingIn}
             onClick={onRefresh}
           >
@@ -775,7 +609,7 @@ function CheckInLogTable({
           </button>
           <button
             type="button"
-            style={buttonStyle}
+            className="qdp-btn"
             disabled={busy || clearing || !logs || logs.length === 0}
             onClick={onClear}
           >
@@ -783,21 +617,21 @@ function CheckInLogTable({
           </button>
         </div>
       </div>
-      {notice === undefined ? null : <p style={bodyStyle}>{notice}</p>}
+      {notice === undefined ? null : <p className="qdp-body">{notice}</p>}
       {nextRun === undefined ? null : (
-        <p style={descriptionStyle}>{t('checkInNextRun', { time: formatTime(nextRun) })}</p>
+        <p className="qdp-body">{t('checkInNextRun', { time: formatTime(nextRun) })}</p>
       )}
       {!logs || logs.length === 0 ? (
-        <p style={descriptionStyle}>{t('checkInLogEmpty')}</p>
+        <p className="qdp-body">{t('checkInLogEmpty')}</p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.15))', paddingBottom: 6, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' }}>
+        <div className="qdp-logList">
+          <div className="qdp-checkinHead">
             <span style={{ flex: 2 }}>{t('checkInLogTime')}</span>
             <span style={{ flex: 3 }}>{t('checkInLogResult')}</span>
             <span style={{ flex: 1, textAlign: 'right' }}>{t('checkInLogAmount')}</span>
           </div>
           {logs.map(log => (
-            <div key={log.id} style={{ display: 'flex', alignItems: 'center', padding: '6px 0', fontSize: 13, borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.08))' }}>
+            <div key={log.id} className="qdp-checkinRow">
               <span style={{ flex: 2, color: 'var(--dsw-alias-label-secondary)' }}>{formatTime(log.timestamp)}</span>
               <span style={{ flex: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
@@ -860,20 +694,20 @@ function CardSection({ title, actions, defaultOpen = false, children }: {
 }): React.ReactNode {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div style={sectionStyle}>
-      <div style={sectionHeadRowStyle}>
+    <div className="qdp-section">
+      <div className="qdp-sectionHeadRow">
         <button
           type="button"
           aria-expanded={open}
-          style={sectionHeadStyle}
+          className="qdp-sectionHead"
           onClick={() => { setOpen(value => !value) }}
         >
           <span className={`qdp-chevron${open ? ' qdp-chevronOpen' : ''}`} aria-hidden="true" />
-          <span style={sectionTitleStyle}>{title}</span>
+          <span className="qdp-sectionTitle">{title}</span>
         </button>
-        {actions === undefined ? null : <span style={sectionActionsStyle}>{actions}</span>}
+        {actions === undefined ? null : <span className="qdp-sectionActions">{actions}</span>}
       </div>
-      {open ? <div style={sectionBodyStyle}>{children}</div> : null}
+      {open ? <div className="qdp-sectionBody">{children}</div> : null}
     </div>
   )
 }
@@ -902,7 +736,6 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     ? (activeVariantId === 'qoder' ? QODER_CN_CARD : QODER_GLOBAL_CARD)
     : (variant ?? QODER_CN_CARD)
 
-  const [hovered, setHovered] = useState(false)
   const [status, setStatus] = useState<QoderWebStatus>()
   const [signedInState, setSignedInState] = useState<boolean>()
   const [readFailure, setReadFailure] = useState<string>()
@@ -1283,8 +1116,8 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
 
   const patEntry = (): React.ReactNode => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <p style={bodyStyle}>{t(currentVariant.patGuideKey)}</p>
-      <div style={patRowStyle}>
+      <p className="qdp-body">{t(currentVariant.patGuideKey)}</p>
+      <div className="qdp-patRow">
         <input
           ref={patInput}
           type="password"
@@ -1299,11 +1132,11 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
               void savePat()
             }
           }}
-          style={patInputStyle}
+          className="qdp-patInput"
         />
         <button
           type="button"
-          style={primaryButtonStyle}
+          className="qdp-btn qdp-btnPrimary"
           disabled={patBusy || busy || patDraft.trim() === ''}
           onClick={() => { void savePat() }}
         >
@@ -1312,7 +1145,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
         {replacing ? (
           <button
             type="button"
-            style={buttonStyle}
+            className="qdp-btn"
             disabled={patBusy}
             onClick={() => {
               setReplacing(false)
@@ -1324,8 +1157,8 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
           </button>
         ) : null}
       </div>
-      {patError === undefined ? null : <p style={errorStyle}>{patError}</p>}
-      {patNotice === undefined ? null : <p style={bodyStyle}>{patNotice}</p>}
+      {patError === undefined ? null : <p className="qdp-error">{patError}</p>}
+      {patNotice === undefined ? null : <p className="qdp-body">{patNotice}</p>}
     </div>
   )
 
@@ -1348,7 +1181,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
       pat.savedAtMs === undefined ? null : t('patSavedAt', { time: formatTime(pat.savedAtMs) }),
       pat.patTail === undefined ? null : t('patTail', { tail: `****${pat.patTail}` }),
     ].filter(part => part !== null)
-    return <p style={bodyStyle}>{parts.join(' · ')}</p>
+    return <p className="qdp-body">{parts.join(' · ')}</p>
   }
 
   // Derive status dot for the tab switcher
@@ -1369,22 +1202,23 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
 
   return (
     <div
-      style={{ ...cardStyle, ...hovered ? cardHoverStyle : {}, ...cardOpenStyle }}
-      onMouseEnter={() => { setHovered(true) }}
-      onMouseLeave={() => { setHovered(false) }}
+      /* Hover lives in the .qdp-card:hover rule; the open tone is the class
+         pair below. No inline border juggling — the CSSOM shorthand pitfall
+         the old object comments describe cannot occur in a stylesheet. */
+      className="qdp-card qdp-cardOpen"
     >
-      <div style={cardBodyStyle}>
+      <div className="qdp-cardBody">
         {isUnified ? (
           <>
             {/* The ONE level of variant tabs. Each tab below owns its whole
                 surface; nothing nests inside it (was: these tabs wrapping a
                 second 5-tab strip). */}
-            <div style={segmentedContainerStyle} role="tablist" aria-label="Qoder Version Selection">
+            <div className="qdp-seg" role="tablist" aria-label="Qoder Version Selection">
               <button
                 type="button"
                 role="tab"
                 aria-selected={activeVariantId === 'qoder'}
-                style={segmentedTabItemStyle(activeVariantId === 'qoder')}
+                className={activeVariantId === 'qoder' ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
                 onClick={() => setActiveVariantId('qoder')}
               >
                 <span style={dotStyle(cnDotStatus)} aria-hidden="true" />
@@ -1394,7 +1228,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 type="button"
                 role="tab"
                 aria-selected={activeVariantId === 'qoder-global'}
-                style={segmentedTabItemStyle(activeVariantId === 'qoder-global')}
+                className={activeVariantId === 'qoder-global' ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
                 onClick={() => setActiveVariantId('qoder-global')}
               >
                 <span style={dotStyle(globalDotStatus)} aria-hidden="true" />
@@ -1404,19 +1238,19 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
           </>
         ) : null}
 
-          <h3 style={quotaTitleStyle}>{t('accountHeading')}</h3>
-          <div style={rowStyle}>
-            <div style={statusStyle} role="status" aria-busy={status === undefined}>
+          <h3 className="qdp-h3">{t('accountHeading')}</h3>
+          <div className="qdp-row">
+            <div className="qdp-status" role="status" aria-busy={status === undefined}>
               <span aria-hidden="true" style={dotStyle(status === undefined ? 'loading' : status.status)} />
               <span>{label}</span>
             </div>
-            <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void manualRefresh() }}>
+            <button type="button" className="qdp-btn" disabled={busy} onClick={() => { void manualRefresh() }}>
               {busy ? t('refreshing') : t('refresh')}
             </button>
             {status?.status !== 'signed-in' || status.authKey === undefined
               ? null
               : <>
-                  <button type="button" style={primaryButtonStyle} disabled={busy || patBusy} onClick={beginReplace}>
+                  <button type="button" className="qdp-btn qdp-btnPrimary" disabled={busy || patBusy} onClick={beginReplace}>
                     {t('patReplace')}
                   </button>
                   {/*
@@ -1428,15 +1262,15 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                    */}
                   {confirmingClear
                     ? <>
-                        <span style={modelRateStyle}>{t('patClearConfirm')}</span>
-                        <button type="button" style={dangerButtonStyle} disabled={busy || patBusy} onClick={() => { void clearPat() }}>
+                        <span className="qdp-rate">{t('patClearConfirm')}</span>
+                        <button type="button" className="qdp-btn qdp-btnDanger" disabled={busy || patBusy} onClick={() => { void clearPat() }}>
                           {patBusy ? t('patClearing') : t('patClearConfirmYes')}
                         </button>
-                        <button type="button" style={buttonStyle} disabled={patBusy} onClick={() => { setConfirmingClear(false) }}>
+                        <button type="button" className="qdp-btn" disabled={patBusy} onClick={() => { setConfirmingClear(false) }}>
                           {t('cancel')}
                         </button>
                       </>
-                    : <button type="button" style={quietDangerButtonStyle} disabled={busy || patBusy} onClick={() => { setConfirmingClear(true) }}>
+                    : <button type="button" className="qdp-btn qdp-btnDangerQuiet" disabled={busy || patBusy} onClick={() => { setConfirmingClear(true) }}>
                         {t('patClear')}
                       </button>}
                 </>
@@ -1444,48 +1278,48 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
           </div>
           {readFailure === undefined || signedInState === undefined
             ? null
-            : <p style={errorStyle}>{t('statusRefreshFailed', { message: readFailure })}</p>}
+            : <p className="qdp-error">{t('statusRefreshFailed', { message: readFailure })}</p>}
           {status?.status === 'signed-in'
             ? <>
                 {status.pat === undefined ? null : patSummaryLine(status.pat)}
                 {replacing ? patEntry() : null}
                 {status.jobTokenRefreshedAt === undefined
                   ? null
-                  : <p style={bodyStyle}>{t('jobTokenRefreshed', { time: formatTime(status.jobTokenRefreshedAt) })}</p>}
+                  : <p className="qdp-body">{t('jobTokenRefreshed', { time: formatTime(status.jobTokenRefreshedAt) })}</p>}
                 {status.catalog === undefined
                   ? null
-                  : <div style={rowStyle}>
-                      <span style={bodyStyle}>
+                  : <div className="qdp-row">
+                      <span className="qdp-body">
                         {status.catalog.source === 'live' && status.catalog.fetchedAt !== undefined
                           ? t('catalogLive', { time: formatTime(status.catalog.fetchedAt) })
                           : status.catalog.source === 'saved' && status.catalog.fetchedAt !== undefined
                             ? t('catalogSaved', { time: formatTime(status.catalog.fetchedAt) })
                             : t('catalogFallback')}
                       </span>
-                      <button type="button" style={buttonStyle} disabled={busy} onClick={() => { void refreshModels() }}>
+                      <button type="button" className="qdp-btn" disabled={busy} onClick={() => { void refreshModels() }}>
                         {busy ? t('refreshingModels') : t('refreshModels')}
                       </button>
                     </div>}
                 {status.catalog?.error === undefined
                   ? null
-                  : <p style={errorStyle}>{t('catalogError', { message: status.catalog.error })}</p>}
+                  : <p className="qdp-error">{t('catalogError', { message: status.catalog.error })}</p>}
                 {/*
                  * Credits: the cycle summary AND the per-package bars in one
                  * block (was: summary on a "status" tab, bars on a "details"
                  * tab — the same question split in two).
                  */}
                 {status.creditsError === undefined ? null
-                  : <p style={errorStyle}>{t('creditsError', { message: status.creditsError })}</p>}
+                  : <p className="qdp-error">{t('creditsError', { message: status.creditsError })}</p>}
                 {status.credits === undefined ? null : (
-                  <div style={quotaListStyle}>
-                    <div style={rowStyle}>
-                      <h3 style={quotaTitleStyle}>{t('creditsHeading')}</h3>
-                      <span style={bodyStyle}>{status.credits.unlimited === true
+                  <div className="qdp-list">
+                    <div className="qdp-row">
+                      <h3 className="qdp-h3">{t('creditsHeading')}</h3>
+                      <span className="qdp-body">{status.credits.unlimited === true
                         ? t('creditsTotalUnlimited')
                         : t('creditsUsed', { percent: formatPercent(status.credits.total) })}</span>
                     </div>
                     {status.credits.cycleResetTime === undefined ? null : (
-                      <p style={descriptionStyle}>
+                      <p className="qdp-body">
                         {t('cycleResetAt', { time: formatCycleReset(status.credits.cycleResetTime) })}
                       </p>
                     )}
@@ -1535,13 +1369,13 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                   title={t('tabCheckIn')}
                   actions={
                     <>
-                      <button type="button" style={buttonStyle} disabled={status.status !== 'signed-in' || busy || checkingIn} onClick={() => { void manualCheckIn() }}>
+                      <button type="button" className="qdp-btn" disabled={status.status !== 'signed-in' || busy || checkingIn} onClick={() => { void manualCheckIn() }}>
                         {checkingIn ? t('checkInChecking') : t('checkInNow')}
                       </button>
-                      <button type="button" style={buttonStyle} disabled={busy || checkingIn} onClick={() => { void manualRefresh() }}>
+                      <button type="button" className="qdp-btn" disabled={busy || checkingIn} onClick={() => { void manualRefresh() }}>
                         {busy ? t('checkInRefreshing') : t('checkInRefresh')}
                       </button>
-                      <button type="button" style={buttonStyle} disabled={busy || clearingLogs || !status.checkIn?.logs || status.checkIn.logs.length === 0} onClick={() => { void clearCheckInLogs() }}>
+                      <button type="button" className="qdp-btn" disabled={busy || clearingLogs || !status.checkIn?.logs || status.checkIn.logs.length === 0} onClick={() => { void clearCheckInLogs() }}>
                         {clearingLogs ? t('checkInClearing') : t('checkInClear')}
                       </button>
                     </>
@@ -1565,13 +1399,13 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
             : null}
           {status?.status === 'signed-out'
             ? <>
-                <p style={status.reason === undefined ? bodyStyle : errorStyle}>
+                <p className={status.reason === undefined ? 'qdp-body' : 'qdp-error'}>
                   {status.reason ?? t(currentVariant.signedOutKey)}
                 </p>
                 {authKey === undefined ? null : patEntry()}
               </>
             : null}
-          {status?.status === 'error' ? <p style={errorStyle}>{status.message}</p> : null}
+          {status?.status === 'error' ? <p className="qdp-error">{status.message}</p> : null}
           {/*
            * Quota sidebar settings: last and collapsed. They were the card's
            * FIRST block — seven controls gating the account content below —
