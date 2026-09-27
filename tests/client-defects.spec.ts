@@ -228,7 +228,6 @@ describe('QoderPluginCard', () => {
         credits: { total: 0, accounts: [{ packageName: 'Mystery', remain: 12, size: 0 }] },
       }) }
       await mountCard()
-      await pressCard(en.tabDetails)
       const tree = JSON.stringify(view!.toJSON())
       expect(tree).toContain(en.percentUnknown)
       expect(tree).toContain(t('creditPackageUnknownSize', { remain: '12' }))
@@ -239,7 +238,6 @@ describe('QoderPluginCard', () => {
         credits: { total: 0, accounts: [{ packageName: 'Mystery', remain: 12, size: 0 }] },
       }) }
       await mountCard()
-      await pressCard(en.tabDetails)
       const bar = view!.root.findAll(node => (node.props as { role?: string }).role === 'progressbar')[0]
       expect(bar).toBeDefined()
       expect(bar!.props['aria-valuenow']).toBeUndefined()
@@ -304,7 +302,6 @@ describe('QoderPluginCard', () => {
       }) }
       const props = { t, variant: QODER_GLOBAL_CARD } as unknown as Parameters<typeof QoderPluginCard>[0]
       await act(async () => { view = create(createElement(QoderPluginCard, props)) })
-      await pressCard(en.tabContext)
     }
     /** Fire the preference checkbox, the smallest write the card offers. */
     async function firePreferenceWrite(): Promise<void> {

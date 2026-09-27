@@ -270,7 +270,7 @@ describe('Qoder plugin card', () => {
     }
     for (const variant of [undefined, QODER_GLOBAL_CARD]) {
       await mount(variant)
-      await press(en.tabContext)
+      // The preference renders inline in the model area — no tab to press.
       const checkbox = inputs().find(input => input.props.type === 'checkbox')
       expect(checkbox).toBeDefined()
       await act(async () => { checkbox!.props.onChange({ currentTarget: { checked: true } }) })
@@ -291,7 +291,6 @@ describe('Qoder plugin card', () => {
       models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
     }
     await mount()
-    await press(en.tabContext)
     expect(view!.root.findAllByType('select')).toHaveLength(0)
     const tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain('200K')
@@ -300,7 +299,7 @@ describe('Qoder plugin card', () => {
 
   // ---- tabbed body -----------------------------------------------------------
 
-  it('splits quota detail, context, and status across the three tabs', async () => {
+  it('renders quota detail and context on the one page', async () => {
     statusBody = {
       status: 'signed-in',
       probeKey: 'test-probe-key',
@@ -318,14 +317,12 @@ describe('Qoder plugin card', () => {
       ],
     }
     await mount()
-    await press(en.tabDetails)
-    let tree = JSON.stringify(view!.toJSON())
+    // Credits and context render on the one page — no tabs to press.
+    const tree = JSON.stringify(view!.toJSON())
     // The exhausted package is dropped; the unknown-size one renders unlimited copy.
     expect(tree).toContain(t('exactRemaining', { remain: '75', size: '100' }))
     expect(tree).not.toContain('组织资源包')
     expect(tree).toContain(en.unlimitedQuota)
-    await press(en.tabContext)
-    tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain('200K')
     expect(tree).toContain(t('contextUpTo', { size: '1M' }))
   })
@@ -338,7 +335,6 @@ describe('Qoder plugin card', () => {
       models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000, 1_000_000] }],
     }
     await mount(QODER_GLOBAL_CARD)
-    await press(en.tabContext)
     const checkbox = inputs().find(input => input.props.type === 'checkbox')
     expect(checkbox).toBeDefined()
     await act(async () => { checkbox!.props.onChange({ currentTarget: { checked: true } }) })

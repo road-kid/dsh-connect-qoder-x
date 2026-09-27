@@ -79,6 +79,32 @@ describe('Unified Qoder Plugin Card', () => {
     vi.unstubAllGlobals()
   })
 
+  /**
+   * Expand the CardSection whose header names `title`, so its body renders.
+   * The header renders title text through nested spans; walk the test
+   * instance's children (instances, not elements) for the string.
+   */
+  async function expandSection(title: string): Promise<void> {
+    const head = view!.root.findAllByType('button').find(node => {
+      if (node.props['aria-expanded'] === undefined) return false
+      const stack: unknown[] = [...node.children]
+      while (stack.length > 0) {
+        const value = stack.shift()
+        if (typeof value === 'string' && value.includes(title)) return true
+        if (Array.isArray(value)) { stack.push(...value); continue }
+        // A ReactTestInstance: descend into its children (it is not an
+        // element — element props would drag fiber handles in and stringify
+        // circularly).
+        if (value !== null && typeof value === 'object' && Array.isArray((value as { children?: unknown[] }).children)) {
+          stack.push(...(value as { children: unknown[] }).children)
+        }
+      }
+      return false
+    })
+    if (head === undefined) throw new Error(`no collapsible section "${title}"`)
+    await act(async () => { head.props.onClick() })
+  }
+
   async function mountUnified(): Promise<void> {
     const fakeScope = {
       getSnapshot: () => ({
@@ -117,8 +143,12 @@ describe('Unified Qoder Plugin Card', () => {
     // substrings — both occur throughout the body's own text — so this checks the
     // intro, which is unique, plus the structural absence of the disclosure.
     expect(json).not.toContain(en.unifiedIntro)
+    // No DISCLOSURE chrome around the whole body: the card never renders a
+    // header claiming the page is collapsed. The two collapsible SECTIONS
+    // (check-in log, sidebar settings) each own an honest aria-expanded= false.
+    const foldables = view!.root.findAllByProps({ 'aria-expanded': false })
+    expect(foldables.length).toBeGreaterThanOrEqual(2)
     expect(view!.root.findAllByProps({ 'aria-expanded': true })).toHaveLength(0)
-    expect(view!.root.findAllByProps({ 'aria-expanded': false })).toHaveLength(0)
   })
 
   it('renders only the one-liner when the owner asks for the summary view', async () => {
@@ -141,20 +171,22 @@ describe('Unified Qoder Plugin Card', () => {
     expect(json).not.toContain(en.quotaPollLabel)
   })
 
-  it('expands to show quota settings at the top, followed by the segmented tabs', async () => {
+  it('opens on the account with the variant tabs and folds the settings last', async () => {
     await mountUnified()
     const json = JSON.stringify(view!.toJSON())
-    // 1. Top section: Quota settings
-    expect(json).toContain(en.quotaToggleCN)
-    expect(json).toContain(en.quotaToggleGlobal)
-    expect(json).toContain(en.quotaPollLabel)
-
-    // 2. Segmented Tabs
+    // Variant tabs stay the ONE level of tabs
     expect(json).toContain(en.variantTabCN)
     expect(json).toContain(en.variantTabGlobal)
-
-    // 3. Default active is CN (signed-in in our mock)
+    // Default active is CN (signed-in in our mock)
     expect(json).toContain(t('patTail', { tail: '****1111' }))
+    // The settings section exists but starts FOLDED — its toggles are absent
+    // until the header is clicked, so the page opens on the account.
+    expect(json).not.toContain(en.quotaToggleCN)
+    await expandSection(en.quotaSettingsHeading)
+    const expanded = JSON.stringify(view!.toJSON())
+    expect(expanded).toContain(en.quotaToggleCN)
+    expect(expanded).toContain(en.quotaToggleGlobal)
+    expect(expanded).toContain(en.quotaPollLabel)
   })
 
   it('switches between China and Global tabs when clicked', async () => {
@@ -247,9 +279,8 @@ describe('Unified Qoder Plugin Card', () => {
       view = create(createElement(QoderPluginCard, props))
     })
 
-    // Expand the card
-    const headerBtn = view!.root.findAllByType('button')[0]!
-    await act(async () => { headerBtn.props.onClick() })
+    // Open the settings section: its toggles are folded on mount.
+    await expandSection(en.quotaSettingsHeading)
 
     // Find the toggle switches: first one is China quota toggle
     const switches = view!.root.findAll(n => n.props.role === 'switch')
@@ -309,6 +340,8 @@ describe('Unified Qoder Plugin Card', () => {
     await act(async () => { headerBtn.props.onClick() })
 
     // (a) Verify switches are disabled when not signed in
+    // The settings section starts folded; open it to reach the switches.
+    await expandSection(en.quotaSettingsHeading)
     const switches = view!.root.findAll(n => n.props.role === 'switch')
     expect(switches.length).toBeGreaterThanOrEqual(2)
     const [cnSwitch, globalSwitch] = switches
@@ -456,7 +489,7 @@ describe('Unified Qoder Plugin Card', () => {
     act(() => contentRenderer?.unmount())
   })
 
-  it('renders check-in log tab after status, context, details when check-in logs exist', async () => {
+  it('renders the check-in log section with its header actions when logs exist', async () => {
     request.mockImplementation(async (url: string) => {
       const path = String(url)
       if (path === QODER_STATUS_PATH) {
@@ -499,23 +532,9 @@ describe('Unified Qoder Plugin Card', () => {
       } as any))
     })
 
-    // Find inner tabs (Status, Context, Details, Check-in log)
-    const innerTabs = view!.root.findAll(n =>
-      n.props.role === 'tab' && (
-        n.children.includes(en.tabStatus) ||
-        n.children.includes(en.tabContext) ||
-        n.children.includes(en.tabDetails) ||
-        n.children.includes(en.tabCheckIn)
-      )
-    )
-    expect(innerTabs).toHaveLength(4)
-    const checkInTab = innerTabs.find(n => n.children.includes(en.tabCheckIn))!
-    expect(checkInTab).toBeDefined()
-
-    // Click checkin tab
-    await act(async () => {
-      checkInTab.props.onClick()
-    })
+    // The check-in section is a collapsible section now, not a tab. Its
+    // action buttons sit in the section header, reachable while folded.
+    await expandSection(en.tabCheckIn)
 
     // Verify check-in log entries rendered
     const amounts = view!.root.findAll(n => n.children.includes('+100'))

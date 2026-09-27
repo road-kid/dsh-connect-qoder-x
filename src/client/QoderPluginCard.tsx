@@ -227,34 +227,29 @@ const patInputStyle: CSSProperties = {
   lineHeight: 1.5,
 }
 
-/**
- * Tab strip for the card body. Kept visually light — a full pill would compete
- * with the section headings, and the card is already the densest surface the
- * plugin owns.
- */
-const tabBarStyle: CSSProperties = {
+/* ---- Collapsible section (settings, check-in log) ---- */
+const sectionStyle: CSSProperties = {
   display: 'flex',
-  gap: 4,
-  marginTop: 4,
-  borderBottom: '1px solid var(--dsw-alias-border-l2)',
+  flexDirection: 'column',
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
+  paddingTop: 10,
 }
-const tabStyle: CSSProperties = {
-  padding: '6px 12px',
-  border: 0,
-  borderBottom: '2px solid transparent',
+const sectionHeadStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '4px 0',
   background: 'transparent',
-  color: 'var(--dsw-alias-label-tertiary)',
+  border: 0,
   font: 'inherit',
-  fontSize: 13,
-  lineHeight: '20px',
   cursor: 'pointer',
+  textAlign: 'left',
+  color: 'var(--dsw-alias-label-secondary)',
 }
-const tabActiveStyle: CSSProperties = {
-  borderBottom: '2px solid var(--dsw-alias-brand-primary)',
-  color: 'var(--dsw-alias-label-primary)',
-  fontWeight: 600,
-}
-const tabPanelStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 16 }
+const sectionTitleStyle: CSSProperties = { fontSize: 13, fontWeight: 600, lineHeight: 1.5 }
+const sectionHeadRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 }
+const sectionActionsStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }
+const sectionBodyStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 10 }
 
 /**
  * Primary action of the inline confirmation and of the PAT save. Fill and text
@@ -828,6 +823,53 @@ function CheckInLogTable({
  * renders only the body. The variant switcher and the tab strip STAY — they are
  * navigation WITHIN the card, not chrome around it.
  */
+/**
+ * Collapsible section shell for the card body: a quiet header row (title +
+ * chevron) that folds its children away. Settings-class content uses it so the
+ * page opens on the account instead of on controls; the check-in log, which
+ * grows unbounded, folds the same way.
+ */
+function CardSection({ title, actions, defaultOpen = false, children }: {
+  title: string
+  /** Header-row controls (e.g. 「立即签到」). Clicking them must NOT fold the
+   * section, so they live OUTSIDE the toggle button, to its right. */
+  actions?: React.ReactNode
+  defaultOpen?: boolean
+  children: React.ReactNode
+}): React.ReactNode {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionHeadRowStyle}>
+        <button
+          type="button"
+          aria-expanded={open}
+          style={sectionHeadStyle}
+          onClick={() => { setOpen(value => !value) }}
+        >
+          <span className={`qdp-chevron${open ? ' qdp-chevronOpen' : ''}`} aria-hidden="true" />
+          <span style={sectionTitleStyle}>{title}</span>
+        </button>
+        {actions === undefined ? null : <span style={sectionActionsStyle}>{actions}</span>}
+      </div>
+      {open ? <div style={sectionBodyStyle}>{children}</div> : null}
+    </div>
+  )
+}
+
+/**
+ * The unified card body: usage first, controls folded.
+ *
+ * Layout, top to bottom (the workbuddy ordering — one level of variant tabs,
+ * then that variant's whole surface vertically):
+ *
+ * 1. account row: status dot, PAT summary, refresh / replace / clear
+ * 2. credit panel: per-package bars AND the cycle summary in one block
+ * 3. model area: the max-window preference above the visibility list
+ * 4. check-in log (collapsed — it grows unbounded)
+ * 5. quota sidebar settings (collapsed — rarely touched, and they gated the
+ *    account content when they sat on top)
+ */
 export function QoderPluginCard(props: QoderPluginCardProps) {
   const { t, scope, signedIn, variant, unified, view } = props
   if (t === undefined) throw new Error('Qoder plugin card requires its translation function')
@@ -850,7 +892,6 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   const [patError, setPatError] = useState<string>()
   const [patNotice, setPatNotice] = useState<string>()
   const patInput = useRef<HTMLInputElement>(null)
-  const [tab, setTab] = useState<'status' | 'context' | 'models' | 'details' | 'checkin'>('status')
   const [checkingIn, setCheckingIn] = useState(false)
   const [clearingLogs, setClearingLogs] = useState(false)
   const [checkInNotice, setCheckInNotice] = useState<string>()
@@ -1310,9 +1351,9 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
       <div style={cardBodyStyle}>
         {isUnified ? (
           <>
-            {/* Top section: Qoder 侧栏设置 */}
-            <QuotaSettingsContent t={t} scope={scope} signedIn={signedIn} />
-            {/* Segmented Tab Switcher (Figure 1) */}
+            {/* The ONE level of variant tabs. Each tab below owns its whole
+                surface; nothing nests inside it (was: these tabs wrapping a
+                second 5-tab strip). */}
             <div style={segmentedContainerStyle} role="tablist" aria-label="Qoder Version Selection">
               <button
                 type="button"
@@ -1385,101 +1426,98 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 {status.catalog?.error === undefined
                   ? null
                   : <p style={errorStyle}>{t('catalogError', { message: status.catalog.error })}</p>}
-                <div role="tablist" style={tabBarStyle}>
-                  {(['status', 'context', 'models', 'details', 'checkin'] as const).map(id => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      aria-selected={tab === id}
-                      onClick={() => { setTab(id) }}
-                      style={{ ...tabStyle, ...(tab === id ? tabActiveStyle : {}) }}
-                    >
-                      {t(id === 'status' ? 'tabStatus' : id === 'context' ? 'tabContext' : id === 'models' ? 'tabModels' : id === 'details' ? 'tabDetails' : 'tabCheckIn')}
-                    </button>
-                  ))}
-                </div>
-
-                {tab === 'status' ? (
-                  <div style={tabPanelStyle}>
-                    {status.credits === undefined ? null : (
-                      <div style={quotaListStyle}>
-                        <div style={rowStyle}>
-                          <h3 style={quotaTitleStyle}>{t('creditsHeading')}</h3>
-                          <span style={bodyStyle}>{status.credits.unlimited === true
-                            ? t('creditsTotalUnlimited')
-                            : t('creditsUsed', { percent: formatPercent(status.credits.total) })}</span>
-                        </div>
-                        {status.credits.cycleResetTime === undefined ? null : (
-                          <p style={descriptionStyle}>
-                            {t('cycleResetAt', { time: formatCycleReset(status.credits.cycleResetTime) })}
-                          </p>
-                        )}
-                      </div>
+                {/*
+                 * Credits: the cycle summary AND the per-package bars in one
+                 * block (was: summary on a "status" tab, bars on a "details"
+                 * tab — the same question split in two).
+                 */}
+                {status.creditsError === undefined ? null
+                  : <p style={errorStyle}>{t('creditsError', { message: status.creditsError })}</p>}
+                {status.credits === undefined ? null : (
+                  <div style={quotaListStyle}>
+                    <div style={rowStyle}>
+                      <h3 style={quotaTitleStyle}>{t('creditsHeading')}</h3>
+                      <span style={bodyStyle}>{status.credits.unlimited === true
+                        ? t('creditsTotalUnlimited')
+                        : t('creditsUsed', { percent: formatPercent(status.credits.total) })}</span>
+                    </div>
+                    {status.credits.cycleResetTime === undefined ? null : (
+                      <p style={descriptionStyle}>
+                        {t('cycleResetAt', { time: formatCycleReset(status.credits.cycleResetTime) })}
+                      </p>
                     )}
-                    {status.creditsError === undefined ? null
-                      : <p style={errorStyle}>{t('creditsError', { message: status.creditsError })}</p>}
-                  </div>
-                ) : tab === 'context' ? (
-                  <div style={tabPanelStyle}>
-                    <ContextTable
-                      models={status.models}
-                      t={t}
-                      disabled={busy}
-                      {...status.useMaximumContextWindow === undefined ? {} : { useMaximumContextWindow: status.useMaximumContextWindow }}
-                      onUseMaximumContextWindow={(enabled: boolean) => { void control({ action: 'set-maximum-context-window', enabled }) }}
-                    />
-                  </div>
-                ) : tab === 'models' ? (
-                  <div style={tabPanelStyle}>
-                    <ModelSwitchTable
-                      models={status.models}
-                      disabledModels={status.disabledModels}
-                      t={t}
-                      disabled={busy}
-                      onSetModelsEnabled={(models, enabled) => {
-                        void control({ action: 'set-models-enabled', models, enabled })
-                      }}
-                    />
-                  </div>
-                ) : tab === 'details' ? (
-                  <div style={tabPanelStyle}>
-                    {status.credits === undefined ? null : (
-                      <div style={quotaListStyle}>
-                        <h3 style={quotaTitleStyle}>{t('creditsDetailHeading')}</h3>
-                        {status.credits.accounts
-                          .filter((account: QoderWebCreditAccount) => account.remain > 0 || account.unlimited === true)
-                          .map((account, index) => (
-                            <CreditBar
-                              key={`${account.packageName}-${String(index)}`}
-                              label={account.packageName}
-                              remain={account.remain}
-                              size={account.size}
-                              unlimited={account.unlimited}
-                              packageEndTime={account.packageEndTime}
-                              t={t}
-                            />
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={tabPanelStyle}>
-                    <CheckInLogTable
-                      logs={status.checkIn?.logs}
-                      t={t}
-                      busy={busy}
-                      checkingIn={checkingIn}
-                      clearing={clearingLogs}
-                      disabled={status.status !== 'signed-in'}
-                      {...checkInNotice === undefined ? {} : { notice: checkInNotice }}
-                      {...status.checkIn?.nextRunAt === undefined ? {} : { nextRun: status.checkIn.nextRunAt }}
-                      onCheckIn={() => { void manualCheckIn() }}
-                      onRefresh={() => { void manualRefresh() }}
-                      onClear={() => { void clearCheckInLogs() }}
-                    />
+                    {status.credits.accounts
+                      .filter((account: QoderWebCreditAccount) => account.remain > 0 || account.unlimited === true)
+                      .map((account, index) => (
+                        <CreditBar
+                          key={`${account.packageName}-${String(index)}`}
+                          label={account.packageName}
+                          remain={account.remain}
+                          size={account.size}
+                          unlimited={account.unlimited}
+                          packageEndTime={account.packageEndTime}
+                          t={t}
+                        />
+                      ))}
                   </div>
                 )}
+                {/*
+                 * Models: the max-window preference rides ABOVE the visibility
+                 * list (was: a whole "context" tab whose only control was this
+                 * preference — a tab for one checkbox).
+                 */}
+                <ContextTable
+                  models={status.models}
+                  t={t}
+                  disabled={busy}
+                  {...status.useMaximumContextWindow === undefined ? {} : { useMaximumContextWindow: status.useMaximumContextWindow }}
+                  onUseMaximumContextWindow={(enabled: boolean) => { void control({ action: 'set-maximum-context-window', enabled }) }}
+                />
+                <ModelSwitchTable
+                  models={status.models}
+                  disabledModels={status.disabledModels}
+                  t={t}
+                  disabled={busy}
+                  onSetModelsEnabled={(models, enabled) => {
+                    void control({ action: 'set-models-enabled', models, enabled })
+                  }}
+                />
+                {/*
+                 * Check-in log: collapsed by default. The action buttons stay
+                 * reachable in the section header row, so checking in needs no
+                 * expand; the log table only unfolds when there is something
+                 * to read.
+                 */}
+                <CardSection
+                  title={t('tabCheckIn')}
+                  actions={
+                    <>
+                      <button type="button" style={buttonStyle} disabled={status.status !== 'signed-in' || busy || checkingIn} onClick={() => { void manualCheckIn() }}>
+                        {checkingIn ? t('checkInChecking') : t('checkInNow')}
+                      </button>
+                      <button type="button" style={buttonStyle} disabled={busy || checkingIn} onClick={() => { void manualRefresh() }}>
+                        {busy ? t('checkInRefreshing') : t('checkInRefresh')}
+                      </button>
+                      <button type="button" style={buttonStyle} disabled={busy || clearingLogs || !status.checkIn?.logs || status.checkIn.logs.length === 0} onClick={() => { void clearCheckInLogs() }}>
+                        {clearingLogs ? t('checkInClearing') : t('checkInClear')}
+                      </button>
+                    </>
+                  }
+                >
+                  <CheckInLogTable
+                    logs={status.checkIn?.logs}
+                    t={t}
+                    busy={busy}
+                    checkingIn={checkingIn}
+                    clearing={clearingLogs}
+                    disabled={status.status !== 'signed-in'}
+                    {...checkInNotice === undefined ? {} : { notice: checkInNotice }}
+                    {...status.checkIn?.nextRunAt === undefined ? {} : { nextRun: status.checkIn.nextRunAt }}
+                    onCheckIn={() => { void manualCheckIn() }}
+                    onRefresh={() => { void manualRefresh() }}
+                    onClear={() => { void clearCheckInLogs() }}
+                  />
+                </CardSection>
               </>
             : null}
           {status?.status === 'signed-out'
@@ -1491,6 +1529,14 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
               </>
             : null}
           {status?.status === 'error' ? <p style={errorStyle}>{status.message}</p> : null}
+          {/*
+           * Quota sidebar settings: last and collapsed. They were the card's
+           * FIRST block — seven controls gating the account content below —
+           * and they are the least-touched surface the card owns.
+           */}
+          <CardSection title={t('quotaSettingsHeading')}>
+            <QuotaSettingsContent t={t} scope={scope} signedIn={signedIn} />
+          </CardSection>
       </div>
     </div>
   )

@@ -82,6 +82,14 @@ export const QUOTA_CSS = `
 .qdp-glyph{flex:none;justify-content:center;align-items:center;display:inline-flex;color:var(--dsw-alias-brand-primary)}
 .qdp-ringWarn{color:var(--dsw-alias-state-error-primary)}
 
+/* Pure-CSS caret for the card's collapsible sections. The host primitives'
+   chevron icon names differ per DSH line, so no static import can serve both —
+   a border caret in the plugin's own CSS is version-proof (workbuddy's
+   approach, restated under this plugin's qdp- prefix). */
+.qdp-chevron{flex:none;width:16px;height:16px;position:relative;transition:transform .16s}
+.qdp-chevron::before{content:"";display:block;position:absolute;left:4px;top:5px;width:7px;height:7px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg)}
+.qdp-chevronOpen{transform:rotate(180deg)}
+
 /* ------------------------------------------------------------ dashboard */
 /* The center column in the layout frame: fill it, scroll the content column,
    and cap the reading width like the harness's own panels. */
