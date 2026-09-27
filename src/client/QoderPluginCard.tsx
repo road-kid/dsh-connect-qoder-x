@@ -1349,6 +1349,26 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                     onRefreshModels={() => { void refreshModels() }}
                   />
                 )}
+                {/*
+                 * Sidebar & check-in settings render FLAT under the Usage
+                 * pane's panel — no fold, no fold heading — scoped to the
+                 * active variant. They belong to the Usage pane only: the
+                 * Models pane is about models, and settings here were
+                 * repeating under it.
+                 */}
+                {pane === 'usage' ? (
+                  <div className="qdp-settingsFlat">
+                    <h3 className="qdp-settingsTitle">{t('quotaSettingsHeading')}</h3>
+                    <QuotaSettingsContent
+                      t={t}
+                      scope={scope}
+                      signedIn={signedIn}
+                      variant={isUnified
+                        ? (activeVariantId === 'qoder' ? 'cn' : 'global')
+                        : (currentVariant.id === 'qoder' ? 'cn' : 'global')}
+                    />
+                  </div>
+                ) : null}
               </>
             : null}
           {status?.status === 'signed-out'
@@ -1357,25 +1377,22 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                   {status.reason ?? t(currentVariant.signedOutKey)}
                 </p>
                 {authKey === undefined ? null : patEntry()}
+                {/* No panes while signed out, but the settings still belong to
+                    this side: render them flat under the signed-out copy. */}
+                <div className="qdp-settingsFlat">
+                  <h3 className="qdp-settingsTitle">{t('quotaSettingsHeading')}</h3>
+                  <QuotaSettingsContent
+                    t={t}
+                    scope={scope}
+                    signedIn={signedIn}
+                    variant={isUnified
+                      ? (activeVariantId === 'qoder' ? 'cn' : 'global')
+                      : (currentVariant.id === 'qoder' ? 'cn' : 'global')}
+                  />
+                </div>
               </>
             : null}
           {status?.status === 'error' ? <p className="qdp-error">{status.message}</p> : null}
-          {/*
-           * Sidebar & check-in settings render FLAT on the Usage pane — no
-           * fold, no fold heading — and only the active variant's rows (the
-           * CN tab shows CN settings, the Global tab Global settings).
-           */}
-          <div className="qdp-settingsFlat">
-            <h3 className="qdp-settingsTitle">{t('quotaSettingsHeading')}</h3>
-            <QuotaSettingsContent
-              t={t}
-              scope={scope}
-              signedIn={signedIn}
-              variant={isUnified
-                ? (activeVariantId === 'qoder' ? 'cn' : 'global')
-                : (currentVariant.id === 'qoder' ? 'cn' : 'global')}
-            />
-          </div>
       </div>
     </div>
   )

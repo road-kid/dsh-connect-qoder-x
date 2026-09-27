@@ -205,7 +205,7 @@ export const QUOTA_CSS = `
 .qdp-sectionActions{align-items:center;gap:6px;margin-left:auto;display:flex}
 .qdp-sectionBody{flex-direction:column;gap:12px;padding-top:10px;display:flex}
 /* The one level of variant tabs. */
-.qdp-seg{align-items:center;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:3px;gap:4px;margin:14px 0 16px;display:flex}
+.qdp-seg{align-items:center;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:3px;gap:4px;display:flex}
 .qdp-segItem{flex:1;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:6px;padding:6px 12px;font:inherit;font-size:13px;line-height:18px;cursor:pointer;appearance:none;outline:none;color:var(--dsw-alias-label-tertiary);transition:all .16s ease;display:flex}
 .qdp-segItem:hover{color:var(--dsw-alias-label-primary)}
 .qdp-segItem:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
