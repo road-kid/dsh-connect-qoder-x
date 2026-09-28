@@ -540,11 +540,14 @@ describe('Unified Qoder Plugin Card', () => {
     const amounts = view!.root.findAll(n => n.children.includes('+100'))
     expect(amounts.length).toBeGreaterThanOrEqual(1)
 
-    // Verify action buttons exist on the check-in line (check in now, refresh, clear)
-    const checkInBtn = view!.root.findAll(n => n.children.includes(en.checkInNow))
-    expect(checkInBtn.length).toBeGreaterThanOrEqual(1)
+    // The day is already claimed in this fixture, so the claim button reads
+    // 「今日已签到」 and is DISABLED — the action is not re-offered.
+    const claimedBtn = view!.root.findAll(n => n.children.includes(en.checkInClaimedToday))[0]
+    expect(claimedBtn).toBeDefined()
+    expect(claimedBtn!.props.disabled).toBe(true)
     const refreshBtn = view!.root.findAll(n => n.children.includes(en.checkInRefresh))
     expect(refreshBtn.length).toBeGreaterThanOrEqual(1)
+    // 清空日志 sits with the expanded log, not on the status line.
     const clearBtn = view!.root.findAll(n => n.children.includes(en.checkInClear))
     expect(clearBtn.length).toBeGreaterThanOrEqual(1)
   })

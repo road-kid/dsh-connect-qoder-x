@@ -317,7 +317,7 @@ function formatTokens(tokens: number): string {
  * 是签到状态与动作(立即签到 / 刷新 / 展开日志 / 清除),签到状态直接印在
  * 行内。workbuddy credit-panel 的结构,按本插件的信息密度重排。
  */
-function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, clearing, checkInNotice, onCheckIn, onRefreshStatus, onClearLogs }: {
+function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, clearing, checkInNotice, autoCheckIn, onCheckIn, onRefreshStatus, onClearLogs }: {
   credits?: QoderWebCredits | undefined
   creditsError?: string | undefined
   checkIn?: Extract<QoderWebStatus, { status: 'signed-in' }>['checkIn'] | undefined
@@ -326,11 +326,21 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
   checkingIn?: boolean
   clearing?: boolean
   checkInNotice?: string | undefined
+  /**
+   * Whether this variant's AUTOMATIC check-in toggle is on. The scheduler
+   * arms a timer for every variant (so a toggle flipped on later still
+   * fires), which means `nextRunAt` exists even while the feature is off —
+   * showing it then is what made the card promise a run that would not
+   * happen. The line is gated on this flag.
+   */
+  autoCheckIn?: boolean
   onCheckIn: () => void
   onRefreshStatus: () => void
   onClearLogs: () => void
 }): React.ReactNode {
   const [logsOpen, setLogsOpen] = useState(false)
+  /** Today's claim already happened (the upstream said so, or the log does). */
+  const claimedToday = checkIn !== undefined && checkIn.status === 'claimed'
   const lastStateText = checkIn === undefined ? undefined : checkIn.status === 'claimed'
     ? t('autoCheckInStatusClaimed', { amount: checkIn.amount ?? 100 })
     : checkIn.status === 'already-claimed'
@@ -345,9 +355,19 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
         <>
           <div className="qdp-panelHead">
             <h3 className="qdp-panelTitle">{t('creditsHeading')}</h3>
-            <span className="qdp-panelMeta">{credits.unlimited === true
-              ? t('creditsTotalUnlimited')
-              : t('creditsUsed', { percent: formatPercent(credits.total) })}</span>
+            <span className="qdp-panelMeta">
+              {/*
+               * 「合计：不限额」 is a CLAIM: it must only appear when the
+               * upstream actually said so. An absent/NaN usage percentage is
+               * not "unlimited" — it is a reading we never got, and saying
+               * otherwise would invent a fact.
+               */}
+              {credits.unlimited === true
+                ? t('creditsTotalUnlimited')
+                : Number.isFinite(credits.total)
+                  ? t('creditsUsed', { percent: formatPercent(credits.total) })
+                  : t('creditsNoData')}
+            </span>
           </div>
           {credits.cycleResetTime === undefined ? null : (
             <p className="qdp-panelMeta">{t('cycleResetAt', { time: formatCycleReset(credits.cycleResetTime) })}</p>
@@ -375,13 +395,23 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
         <div className="qdp-checkinState">
           <span className="qdp-panelTitle">{t('tabCheckIn')}</span>
           {lastStateText === undefined ? null : <span className="qdp-panelMeta">{t('checkInLastToday', { state: lastStateText })}</span>}
-          {checkIn?.nextRunAt === undefined ? null : (
+          {autoCheckIn === true && checkIn?.nextRunAt !== undefined ? (
             <span className="qdp-panelMeta">{t('checkInNextRun', { time: formatTime(checkIn.nextRunAt) })}</span>
-          )}
+          ) : null}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button type="button" className="qdp-btn qdp-btnPrimary" disabled={busy || checkingIn} onClick={onCheckIn}>
-            {checkingIn ? t('checkInChecking') : t('checkInNow')}
+          {/*
+           * 「立即领取」 is an ACTION: once today's claim is in, re-offering it
+           * invites a request the upstream will only refuse. The claimed state
+           * disables the button and says so.
+           */}
+          <button
+            type="button"
+            className={claimedToday ? 'qdp-btn' : 'qdp-btn qdp-btnPrimary'}
+            disabled={busy || checkingIn || claimedToday}
+            onClick={onCheckIn}
+          >
+            {checkingIn ? t('checkInChecking') : claimedToday ? t('checkInClaimedToday') : t('checkInNow')}
           </button>
           <button type="button" className="qdp-btn" disabled={busy || checkingIn} onClick={onRefreshStatus}>
             {busy ? t('checkInRefreshing') : t('checkInRefresh')}
@@ -435,11 +465,34 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
   onSetModelsEnabled: (models: readonly string[], enabled: boolean) => void
   onRefreshModels: () => void
 }): React.ReactNode {
-  const list = [...(models ?? [])].sort((a, b) => (b.contextWindow ?? 0) - (a.contextWindow ?? 0))
+  /*
+   * Display order, NOT upstream order.
+   *
+   * The discovery answer arrives in whatever order the upstream lists it,
+   * which put 「Qoder Auto」 second-to-last — an arbitrary place for the
+   * default/auto entry a user looks for first. Rather than trusting it, the
+   * roster is sorted by a deliberate tier: the auto/default entry first, then
+   * the strongest tiers, then the cheap ones, and finally anything the
+   * upstream added that this list does not know about (kept, at the end, in
+   * upstream order — an unknown entry is still better than a hidden one).
+   */
+  const MODEL_TIER: readonly string[] = ['auto', 'ultimate', 'performance', 'cmodel', 'efficient', 'lite']
+  const tierOf = (id: string): number => {
+    const index = MODEL_TIER.indexOf(id)
+    return index === -1 ? MODEL_TIER.length : index
+  }
+  const list = [...(models ?? [])].sort((a, b) => {
+    const byTier = tierOf(a.id) - tierOf(b.id)
+    // Within a tier (and for unknown ids), the larger window is the more
+    // capable entry, so it leads.
+    return byTier !== 0 ? byTier : (b.contextWindow ?? 0) - (a.contextWindow ?? 0)
+  })
   return (
     <div className="qdp-list">
+      {/* No pane title: the tab strip above already names this pane. The row
+          keeps only the catalogue provenance and its refresh control. */}
       <div className="qdp-modelHead">
-        <h3 className="qdp-panelTitle">{t('tabModels')}</h3>
+        <span />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {catalog === undefined ? null : (
             <span className="qdp-modelMeta">
@@ -635,6 +688,28 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
 
   const isUnified = unified === true
   const liveSignIn = useSyncExternalStore(onQuotaSettingsChange, quotaSignInState)
+  /**
+   * The automatic check-in toggles, read from the same settings face the
+   * settings rows write. The scheduler arms a timer for EVERY variant (so a
+   * toggle flipped on later still fires), so `nextRunAt` alone cannot tell
+   * 「已安排」 from 「功能没开」 — this flag is what the card gates the
+   * 「下次自动领取」 line on.
+   *
+   * getSnapshot MUST return the same reference between renders unless the
+   * store changed: returning `scope.getSnapshot().value` (a fresh object each
+   * call) re-renders forever and trips React's maximum-update-depth guard —
+   * the exact hazard `stableProject` documents in QuotaSettingsCard. The
+   * projection here is a STRING, so identity is stable by construction.
+   */
+  const settingsSubscribe = useCallback((onStoreChange: () => void) => {
+    return scope?.subscribe(onStoreChange) ?? (() => {})
+  }, [scope])
+  const autoCheckInKey = useSyncExternalStore(settingsSubscribe, () => {
+    const value = scope?.getSnapshot().value
+    return `${value?.autoCheckInCN === true ? '1' : '0'}${value?.autoCheckInGlobal === true ? '1' : '0'}`
+  })
+  const autoCheckInCN = autoCheckInKey.startsWith('1')
+  const autoCheckInGlobal = autoCheckInKey.endsWith('1')
   const [activeVariantId, setActiveVariantId] = useState<QoderVariantId>('qoder')
   const currentVariant = isUnified
     ? (activeVariantId === 'qoder' ? QODER_CN_CARD : QODER_GLOBAL_CARD)
@@ -1223,7 +1298,9 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 </div>
               : <div className="qdp-patBox">
                   <div className="qdp-patBoxCopy">
-                    <span className="qdp-patBoxName">{t('patBoxLabel')}</span>
+                    {/* Same size/weight as the account box's 「已登录」 line —
+                        the box is a labelled field, not a caption. */}
+                    <span className="qdp-accountState">{t('patBoxLabel')}</span>
                     <span className="qdp-patBoxMeta">
                       {[status.pat.accountName,
                         status.pat.patTail === undefined ? null : t('patTail', { tail: `****${status.pat.patTail}` })].filter(Boolean).join(' · ')}
@@ -1251,6 +1328,9 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                   credits={status.credits}
                   creditsError={status.creditsError}
                   checkIn={status.checkIn}
+                  autoCheckIn={isUnified
+                    ? (activeVariantId === 'qoder' ? autoCheckInCN : autoCheckInGlobal)
+                    : (currentVariant.id === 'qoder' ? autoCheckInCN : autoCheckInGlobal)}
                   t={t}
                   busy={busy}
                   checkingIn={checkingIn}
