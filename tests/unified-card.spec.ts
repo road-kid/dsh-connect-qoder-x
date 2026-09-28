@@ -143,9 +143,10 @@ describe('Unified Qoder Plugin Card', () => {
     // substrings — both occur throughout the body's own text — so this checks the
     // intro, which is unique, plus the structural absence of the disclosure.
     expect(json).not.toContain(en.unifiedIntro)
-    // No DISCLOSURE chrome anywhere: the settings fold is gone (flat on the
-    // pane) and no section claims the page is collapsed. The selected variant
-    // tab (China) + selected pane (Usage) are the only tab-state.
+    // No DISCLOSURE chrome anywhere: the settings fold is gone (flat) and no
+    // section claims the page is collapsed. Selected tab-state: the China
+    // variant tab + the Models pane tab (the strip's only pane now — the
+    // usage panel moved above the strip, un-tabbed).
     expect(view!.root.findAllByProps({ 'aria-expanded': true })).toHaveLength(0)
     expect(view!.root.findAllByProps({ 'aria-expanded': false })).toHaveLength(0)
     expect(view!.root.findAllByProps({ 'aria-selected': true })).toHaveLength(2)

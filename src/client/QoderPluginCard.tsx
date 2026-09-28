@@ -394,19 +394,27 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
           >
             {logsOpen ? t('checkInLogHide') : t('checkInLogShow')}
           </button>
-          <button
-            type="button"
-            className="qdp-btn"
-            disabled={busy || clearing || checkIn?.logs === undefined || checkIn.logs.length === 0}
-            onClick={onClearLogs}
-          >
-            {clearing ? t('checkInClearing') : t('checkInClear')}
-          </button>
         </div>
       </div>
       {checkInNotice === undefined ? null : <p className="qdp-body">{checkInNotice}</p>}
+      {/*
+       * 展开的日志区:只有日志表和一个清空按钮。签到动作(立即签到/刷新)在
+       * 上一行,这里不再重复;「签到日志」标题也只在上一行出现一次。
+       */}
       {!logsOpen || checkIn?.logs === undefined ? null : (
-        <CheckInLogTable logs={checkIn.logs} t={t} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="qdp-btn"
+              disabled={busy || clearing}
+              onClick={onClearLogs}
+            >
+              {clearing ? t('checkInClearing') : t('checkInClear')}
+            </button>
+          </div>
+          <CheckInLogTable logs={checkIn.logs} t={t} />
+        </div>
       )}
     </div>
   )
@@ -510,15 +518,6 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
 function CheckInLogTable({
   logs = [],
   t,
-  onCheckIn,
-  onRefresh,
-  onClear,
-  busy,
-  checkingIn,
-  clearing,
-  disabled,
-  notice,
-  nextRun,
 }: {
   logs?: readonly {
     id: string
@@ -529,94 +528,46 @@ function CheckInLogTable({
     message?: string | undefined
   }[] | undefined
   t: QoderPluginCardInjected['t']
-  onCheckIn?: () => void
-  onRefresh?: () => void
-  onClear?: () => void
-  busy?: boolean
-  checkingIn?: boolean
-  clearing?: boolean
-  disabled?: boolean
-  notice?: string | undefined
-  nextRun?: number | undefined
 }): React.ReactNode {
   return (
-    <div className="qdp-list">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <h3 className="qdp-h3">{t('tabCheckIn')}</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button
-            type="button"
-            className="qdp-btn"
-            disabled={disabled || busy || checkingIn}
-            onClick={onCheckIn}
-          >
-            {checkingIn ? t('checkInChecking') : t('checkInNow')}
-          </button>
-          <button
-            type="button"
-            className="qdp-btn"
-            disabled={busy || checkingIn}
-            onClick={onRefresh}
-          >
-            {busy ? t('checkInRefreshing') : t('checkInRefresh')}
-          </button>
-          <button
-            type="button"
-            className="qdp-btn"
-            disabled={busy || clearing || !logs || logs.length === 0}
-            onClick={onClear}
-          >
-            {clearing ? t('checkInClearing') : t('checkInClear')}
-          </button>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="qdp-checkinHead">
+        <span style={{ flex: 2 }}>{t('checkInLogTime')}</span>
+        <span style={{ flex: 3 }}>{t('checkInLogResult')}</span>
+        <span style={{ flex: 1, textAlign: 'right' }}>{t('checkInLogAmount')}</span>
       </div>
-      {notice === undefined ? null : <p className="qdp-body">{notice}</p>}
-      {nextRun === undefined ? null : (
-        <p className="qdp-body">{t('checkInNextRun', { time: formatTime(nextRun) })}</p>
-      )}
-      {!logs || logs.length === 0 ? (
-        <p className="qdp-body">{t('checkInLogEmpty')}</p>
-      ) : (
-        <div className="qdp-logList">
-          <div className="qdp-checkinHead">
-            <span style={{ flex: 2 }}>{t('checkInLogTime')}</span>
-            <span style={{ flex: 3 }}>{t('checkInLogResult')}</span>
-            <span style={{ flex: 1, textAlign: 'right' }}>{t('checkInLogAmount')}</span>
-          </div>
-          {logs.map(log => (
-            <div key={log.id} className="qdp-checkinRow">
-              <span style={{ flex: 2, color: 'var(--dsw-alias-label-secondary)' }}>{formatTime(log.timestamp)}</span>
-              <span style={{ flex: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  flexShrink: 0,
-                  background: log.status === 'claimed'
-                    ? 'var(--dsw-alias-status-success, #52c41a)'
-                    : log.status === 'already-claimed'
-                      ? 'var(--dsw-alias-status-info, #1890ff)'
-                      : log.status === 'no-campaign'
-                        ? 'var(--dsw-alias-label-tertiary, #999)'
-                        : 'var(--dsw-alias-status-error, #f5222d)',
-                }} />
-                <span>
-                  {log.status === 'claimed'
-                    ? t('autoCheckInStatusClaimed', { amount: log.amount ?? 100 })
-                    : log.status === 'already-claimed'
-                      ? t('autoCheckInStatusAlready')
-                      : log.status === 'no-campaign'
-                        ? t('autoCheckInStatusNoCampaign')
-                        : t('autoCheckInStatusError', { message: log.message ?? '' })}
-                </span>
-              </span>
-              <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, color: log.amount ? 'var(--dsw-alias-brand-primary)' : 'inherit' }}>
-                {log.amount ? `+${log.amount}` : '-'}
-              </span>
-            </div>
-          ))}
+      {logs.map(log => (
+        <div key={log.id} className="qdp-checkinRow">
+          <span style={{ flex: 2, color: 'var(--dsw-alias-label-secondary)' }}>{formatTime(log.timestamp)}</span>
+          <span style={{ flex: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              flexShrink: 0,
+              background: log.status === 'claimed'
+                ? 'var(--dsw-alias-status-success, #52c41a)'
+                : log.status === 'already-claimed'
+                  ? 'var(--dsw-alias-status-info, #1890ff)'
+                  : log.status === 'no-campaign'
+                    ? 'var(--dsw-alias-label-tertiary, #999)'
+                    : 'var(--dsw-alias-status-error, #f5222d)',
+            }} />
+            <span>
+              {log.status === 'claimed'
+                ? t('autoCheckInStatusClaimed', { amount: log.amount ?? 100 })
+                : log.status === 'already-claimed'
+                  ? t('autoCheckInStatusAlready')
+                  : log.status === 'no-campaign'
+                    ? t('autoCheckInStatusNoCampaign')
+                    : t('autoCheckInStatusError', { message: log.message ?? '' })}
+            </span>
+          </span>
+          <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, color: log.amount ? 'var(--dsw-alias-brand-primary)' : 'inherit' }}>
+            {log.amount ? `+${log.amount}` : '-'}
+          </span>
         </div>
-      )}
+      ))}
     </div>
   )
 }
@@ -1272,9 +1223,10 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 </div>
               : <div className="qdp-patBox">
                   <div className="qdp-patBoxCopy">
-                    <span className="qdp-patBoxName">{status.pat.accountName ?? t('patBoxLabel')}</span>
+                    <span className="qdp-patBoxName">{t('patBoxLabel')}</span>
                     <span className="qdp-patBoxMeta">
-                      {status.pat.patTail === undefined ? '' : t('patTail', { tail: `****${status.pat.patTail}` })}
+                      {[status.pat.accountName,
+                        status.pat.patTail === undefined ? null : t('patTail', { tail: `****${status.pat.patTail}` })].filter(Boolean).join(' · ')}
                     </span>
                   </div>
                   <button type="button" className="qdp-btn qdp-btnDangerQuiet" disabled={busy || patBusy} onClick={() => { setConfirmingClear(true) }}>
@@ -1290,14 +1242,28 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 {status.jobTokenRefreshedAt === undefined
                   ? null
                   : <p className="qdp-body">{t('jobTokenRefreshed', { time: formatTime(status.jobTokenRefreshedAt) })}</p>}
-                {/* Catalog freshness + its refresh control live in the Models pane. */}
                 {/*
-                 * Two panes, switched by the tab strip at the bottom of the
-                 * signed-in arm: 「用量与签到」 (credits + check-in on one
-                 * bordered panel, workbuddy's credit-panel shape) and 「模型」
-                 * (visibility + per-model context capacity + the refresh
-                 * control that used to live on the account row). Rendering
-                 * keeps BOTH panes mounted so tab switches never refetch.
+                 * 用量与签到面板直接跟在 PAT 框下面:这是打开卡片就想看的
+                 * 信息,不再藏在 tab 里(上一版它在「用量与签到」面板下,
+                 * 与设置一起被 tab 遮住了)。
+                 */}
+                <UsageCheckInPanel
+                  credits={status.credits}
+                  creditsError={status.creditsError}
+                  checkIn={status.checkIn}
+                  t={t}
+                  busy={busy}
+                  checkingIn={checkingIn}
+                  clearing={clearingLogs}
+                  checkInNotice={checkInNotice}
+                  onCheckIn={() => { void manualCheckIn() }}
+                  onRefreshStatus={() => { void manualRefresh() }}
+                  onClearLogs={() => { void clearCheckInLogs() }}
+                />
+                {/*
+                 * 「用量与签到 | 模型」双栏:用量面板已上移到 tab 之外(打开
+                 * 即见),所以「用量与签到」栏现在只承载侧栏与签到设置(平铺、
+                 * 无标题,跟随当前 variant);「模型」栏承载模型与每模型窗口。
                  */}
                 <div className="qdp-paneTabs" role="tablist" aria-label={t('paneUsage')}>
                   <button
@@ -1319,21 +1285,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                     {t('paneModels')}
                   </button>
                 </div>
-                {pane === 'usage' ? (
-                  <UsageCheckInPanel
-                    credits={status.credits}
-                    creditsError={status.creditsError}
-                    checkIn={status.checkIn}
-                    t={t}
-                    busy={busy}
-                    checkingIn={checkingIn}
-                    clearing={clearingLogs}
-                    checkInNotice={checkInNotice}
-                    onCheckIn={() => { void manualCheckIn() }}
-                    onRefreshStatus={() => { void manualRefresh() }}
-                    onClearLogs={() => { void clearCheckInLogs() }}
-                  />
-                ) : (
+                {pane === 'models' ? (
                   <ModelsPane
                     models={status.models}
                     disabledModels={status.disabledModels}
@@ -1348,27 +1300,20 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                     }}
                     onRefreshModels={() => { void refreshModels() }}
                   />
+                ) : (
+                  /*
+                   * 侧栏与签到设置:平铺,无标题(去掉「侧栏与签到设置」标题
+                   * 行),跟随当前 variant。
+                   */
+                  <QuotaSettingsContent
+                    t={t}
+                    scope={scope}
+                    signedIn={signedIn}
+                    variant={isUnified
+                      ? (activeVariantId === 'qoder' ? 'cn' : 'global')
+                      : (currentVariant.id === 'qoder' ? 'cn' : 'global')}
+                  />
                 )}
-                {/*
-                 * Sidebar & check-in settings render FLAT under the Usage
-                 * pane's panel — no fold, no fold heading — scoped to the
-                 * active variant. They belong to the Usage pane only: the
-                 * Models pane is about models, and settings here were
-                 * repeating under it.
-                 */}
-                {pane === 'usage' ? (
-                  <div className="qdp-settingsFlat">
-                    <h3 className="qdp-settingsTitle">{t('quotaSettingsHeading')}</h3>
-                    <QuotaSettingsContent
-                      t={t}
-                      scope={scope}
-                      signedIn={signedIn}
-                      variant={isUnified
-                        ? (activeVariantId === 'qoder' ? 'cn' : 'global')
-                        : (currentVariant.id === 'qoder' ? 'cn' : 'global')}
-                    />
-                  </div>
-                ) : null}
               </>
             : null}
           {status?.status === 'signed-out'
@@ -1380,7 +1325,6 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                 {/* No panes while signed out, but the settings still belong to
                     this side: render them flat under the signed-out copy. */}
                 <div className="qdp-settingsFlat">
-                  <h3 className="qdp-settingsTitle">{t('quotaSettingsHeading')}</h3>
                   <QuotaSettingsContent
                     t={t}
                     scope={scope}
