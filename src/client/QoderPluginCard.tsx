@@ -452,8 +452,8 @@ const SOON_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
  *
  * 这是原来「签到日志」表格的替代:表格只能证明「点过按钮」,而这里回答的是
  * 用户真正关心的问题 —— 我手上有哪些还没过期的资源包,各自什么时候作废。
- * 因此按「领取时间」倒序列出,并在每行右侧给出该笔的到期日(上游未给有效期
- * 时显示未知,不猜)。
+ * 因此按「领取时间」倒序列出,并在每行右侧给出该笔的到期日;上游没给有效期
+ * 的笔(手动签到)按领取后 30 天补算,不再显示「有效期未知」。
  */
 function CheckInLedger({ logs, t }: {
   logs: readonly {
@@ -468,6 +468,14 @@ function CheckInLedger({ logs, t }: {
 }): React.ReactNode {
   const now = Date.now()
   /*
+   * 手动在插件里签到的 +100 Credits,上游不回带有效期;活动的口径是领取后
+   * 30 天有效,所以按领取时间补算。活动口径变化时改这一个常数即可 —— 不写
+   * 进存储,存储里的字段仍然忠实于上游给没给。
+   */
+  const MANUAL_GRANT_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000
+  const effectiveExpiry = (entry: { timestamp: number; expiresAtMs?: number | undefined }): number =>
+    entry.expiresAtMs ?? entry.timestamp + MANUAL_GRANT_VALIDITY_MS
+  /*
    * 界面能显示几条就显示几条:不再有 7/30 天切换,也不再按时间窗过滤。
    * 台账回答的是「我手上有哪些资源包」,把窗口做成按钮只是把同一个列表切成
    * 两半,用户还得猜哪一半是对的。条数由 CSS 的行高上限决定(见
@@ -481,10 +489,13 @@ function CheckInLedger({ logs, t }: {
   /*
    * 「3 天内到期」只统计在这个窗口内真的会作废的笔 —— 不是「所有还没过期的」。
    * workbuddy 的「最近 3 天到期」就是这个读法:30 天有效期的包还剩 20 天才
-   * 到期,它不该出现在「3 天内到期」里。上游没给有效期的笔无法判断,不计入。
+   * 到期,它不该出现在「3 天内到期」里。有效期按补算后的口径算(见上),
+   * 所以手动签到的包也参与统计。
    */
-  const expiringSoon = claimed.filter(entry =>
-    entry.expiresAtMs !== undefined && entry.expiresAtMs > now && entry.expiresAtMs <= now + SOON_WINDOW_MS)
+  const expiringSoon = claimed.filter(entry => {
+    const expiry = effectiveExpiry(entry)
+    return expiry > now && expiry <= now + SOON_WINDOW_MS
+  })
   const expiringSoonTotal = expiringSoon.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
   return (
     <div className="qdp-panel">
@@ -496,17 +507,14 @@ function CheckInLedger({ logs, t }: {
       ) : (
         <div className="qdp-logList qdp-ledgerList">
           {claimed.map(entry => {
-            const expired = entry.expiresAtMs !== undefined && entry.expiresAtMs <= now
+            const expiry = effectiveExpiry(entry)
+            const expired = expiry <= now
             return (
               <div key={entry.id} className="qdp-ledgerRow">
                 <span className="qdp-ledgerDate">{formatTime(entry.timestamp)}</span>
                 <span className="qdp-ledgerAmount">{entry.amount === undefined ? '—' : `+${entry.amount}`}</span>
                 <span className={expired ? 'qdp-ledgerExpiry qdp-ledgerExpired' : 'qdp-ledgerExpiry'}>
-                  {entry.expiresAtMs === undefined
-                    ? t('ledgerExpiryUnknown')
-                    : expired
-                      ? t('ledgerExpired')
-                      : t('ledgerExpiresAt', { date: formatDate(entry.expiresAtMs) })}
+                  {expired ? t('ledgerExpired') : t('ledgerExpiresAt', { date: formatDate(expiry) })}
                 </span>
               </div>
             )
@@ -516,7 +524,7 @@ function CheckInLedger({ logs, t }: {
       {/* 底部到期小结:与上面的记录行用一条分隔线断开,只占 3 行的空间,
           剩下的高度留给上面的记录列表。 */}
       <div className="qdp-ledgerFoot">
-        <span className="qdp-panelMeta">{t('ledgerExpiringHeading')}</span>
+        <span className="qdp-panelMeta">{t('ledgerExpiringHeading', { days: 3 })}</span>
         <span className="qdp-ledgerFootValue">{String(expiringSoonTotal)}</span>
       </div>
     </div>
