@@ -35,6 +35,13 @@ export interface CheckInLogItem {
   amount?: number | undefined
   campaignKey?: string | undefined
   message?: string | undefined
+  /**
+   * When this claim's credits lapse, epoch ms. Recorded per claim so the
+   * card's ledger can show each package's own window: the daily benefit is
+   * granted for a fixed period, and the grants expire independently of one
+   * another rather than as one account-wide date.
+   */
+  expiresAtMs?: number | undefined
 }
 
 export interface CheckInRecord {
@@ -43,8 +50,16 @@ export interface CheckInRecord {
   status: 'claimed' | 'already-claimed' | 'no-campaign' | 'error'
   amount?: number | undefined
   message?: string | undefined
+  expiresAtMs?: number | undefined
   logs?: CheckInLogItem[] | undefined
-}
+}/**
+ * How many claim rows the ledger keeps per variant.
+ *
+ * The card shows a recent window (30 days) and the benefit renews daily, so
+ * 60 rows comfortably covers it; the cap only exists so a long-lived profile
+ * cannot grow the file without bound.
+ */
+export const CHECK_IN_LOG_LIMIT = 60
 
 export interface CheckInStatusStore {
   read(variantId: string): CheckInRecord | undefined
@@ -101,8 +116,9 @@ export class JsonFileCheckInStore implements CheckInStatusStore {
         status: record.status,
         ...record.amount === undefined ? {} : { amount: record.amount },
         ...record.message === undefined ? {} : { message: record.message },
+        ...record.expiresAtMs === undefined ? {} : { expiresAtMs: record.expiresAtMs },
       }
-      const updatedLogs = [newLog, ...existingLogs.filter(l => l.id !== newLog.id)].slice(0, 30)
+      const updatedLogs = [newLog, ...existingLogs.filter(l => l.id !== newLog.id)].slice(0, CHECK_IN_LOG_LIMIT)
       all[variantId] = {
         ...record,
         logs: updatedLogs,
@@ -357,6 +373,7 @@ export class CheckInScheduler {
           status: result.status,
           amount: result.amount,
           message: result.message,
+          ...result.expiresAtMs === undefined ? {} : { expiresAtMs: result.expiresAtMs },
         })
         if (result.status === 'claimed') {
           target.onClaimed?.()

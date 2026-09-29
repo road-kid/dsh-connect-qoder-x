@@ -55,6 +55,17 @@ export interface QoderCheckInResult {
   amount?: number | undefined
   campaignKey?: string | undefined
   message?: string | undefined
+  /**
+   * When the claimed credits expire, epoch milliseconds.
+   *
+   * A claimed package is not permanent — Qoder grants it for a fixed window
+   * (30 days for the daily 100-credit benefit) — and the card has to say so.
+   * Resolution order: the claim's own `expiresAt`; failing that, the
+   * campaign's stated `validity.days` counted from the claim moment. Absent
+   * when the upstream said neither, and an absent value is rendered as
+   * unknown rather than guessed.
+   */
+  expiresAtMs?: number | undefined
 }
 
 export interface QoderCheckInServiceOptions {
@@ -67,6 +78,32 @@ export interface QoderCheckInServiceOptions {
 }
 
 const defaultCheckInTimeoutMs = 15_000
+
+/**
+ * When a claimed package expires, in epoch milliseconds; undefined when the
+ * upstream stated neither an absolute moment nor a validity window.
+ *
+ * Two sources, in order of authority: the claim's own `expiresAt` (an ISO
+ * string, what the upstream returns for the grant it just made) and the
+ * campaign's `validity.days` counted from the claim. Neither is invented — a
+ * plugin that guessed a 30-day window would print a confident wrong date the
+ * day Qoder changes its campaign.
+ */
+export function resolveExpiryMs(
+  claimExpiresAt: string | undefined,
+  validity: { mode?: string; days?: number } | undefined,
+  claimedAtMs: number,
+): number | undefined {
+  if (typeof claimExpiresAt === 'string' && claimExpiresAt.trim() !== '') {
+    const parsed = Date.parse(claimExpiresAt)
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed
+  }
+  const days = validity?.days
+  if (typeof days === 'number' && Number.isFinite(days) && days > 0) {
+    return claimedAtMs + days * 24 * 60 * 60 * 1000
+  }
+  return undefined
+}
 
 export class QoderCheckInService {
   private readonly authService: QoderAuthService
@@ -157,6 +194,7 @@ export class QoderCheckInService {
       }
 
       if (benefitCampaign.claimStatus === 'CLAIMED') {
+        const expiresAtMs = resolveExpiryMs(undefined, benefitCampaign.benefit?.validity, nowMs)
         return {
           variantId: this.variantId,
           date: today,
@@ -165,6 +203,7 @@ export class QoderCheckInService {
           campaignKey: benefitCampaign.campaignKey,
           amount: benefitCampaign.benefit?.amount ?? 100,
           message: 'Already claimed today',
+          ...expiresAtMs === undefined ? {} : { expiresAtMs },
         }
       }
 
@@ -175,6 +214,7 @@ export class QoderCheckInService {
       const amount = claimResult.benefit?.amount ?? benefitCampaign.benefit?.amount ?? 100
 
       if (isClaimed) {
+        const expiresAtMs = resolveExpiryMs(claimResult.expiresAt, benefitCampaign.benefit?.validity, nowMs)
         return {
           variantId: this.variantId,
           date: today,
@@ -183,6 +223,7 @@ export class QoderCheckInService {
           amount,
           campaignKey: benefitCampaign.campaignKey,
           message: replayed ? 'Already claimed today' : `Successfully claimed ${amount} credits`,
+          ...expiresAtMs === undefined ? {} : { expiresAtMs },
         }
       }
 
