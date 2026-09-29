@@ -290,12 +290,13 @@ describe('Qoder plugin card', () => {
     }
     await mount()
     await openPane(en.paneModels)
-    // The slider's value is the INDEX of the declared size, so the first of
-    // [200K, 1M] is 0 — but what it posts is the size itself.
+    // The slider's value is the INDEX into [origin, ...declared], so the
+    // first real size of [200K, 1M] sits at 1 — but what it posts is the
+    // size itself, never the index.
     const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
     expect(slider).toBeDefined()
-    expect(slider!.props.value).toBe(0)
-    await act(async () => { slider!.props.onChange({ currentTarget: { value: '1' } }) })
+    expect(slider!.props.value).toBe(1)
+    await act(async () => { slider!.props.onChange({ currentTarget: { value: '2' } }) })
     expect(posts).toHaveLength(1)
     expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-model-context-window', model: 'm1', window: 1_000_000 })
   })
@@ -311,10 +312,11 @@ describe('Qoder plugin card', () => {
     await openPane(en.paneModels)
     const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
     expect(slider).toBeDefined()
-    // Exactly one stop per declared size: 0 .. length-1. No intermediate token
+    // Exactly one stop per declared size, plus the origin at 0 (which only
+    // widens the track — it is not a reachable size). No intermediate token
     // counts are reachable, which is the guarantee the old <select> gave.
     expect(slider!.props.min).toBe(0)
-    expect(slider!.props.max).toBe(1)
+    expect(slider!.props.max).toBe(2)
     // The tick labels name the sizes, ascending.
     const tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain('200K')
@@ -369,7 +371,7 @@ describe('Qoder plugin card', () => {
     await openPane(en.paneModels)
     const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
     expect(slider).toBeDefined()
-    await act(async () => { slider!.props.onChange({ currentTarget: { value: '1' } }) })
+    await act(async () => { slider!.props.onChange({ currentTarget: { value: '2' } }) })
     expect(posts).toHaveLength(1)
     expect(posts[0]!.url).toBe(QODER_GLOBAL_CARD.probePath)
     expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-model-context-window', model: 'm1', window: 1_000_000 })

@@ -266,6 +266,9 @@ export const QUOTA_CSS = `
 .qdp-windowInput:disabled{cursor:default}
 .qdp-windowTicks{position:relative;height:14px;font-size:11px;line-height:14px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}
 .qdp-windowTick{position:absolute;transform:translateX(-50%);white-space:nowrap}
+/* The origin marker: the track starts at 0 for every model, and the user
+   asked for that start to be visible without printing the number 0. */
+.qdp-windowTickMark{display:inline-block;width:1px;height:4px;background:var(--dsw-alias-border-l4)}
 .qdp-windowValue{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
 .qdp-track{height:8px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-bg-layer-2)}
 .qdp-checkinRow{align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex}

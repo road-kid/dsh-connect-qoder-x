@@ -616,23 +616,28 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
             /*
              * 滑块只走上游声明过的档位,Qoder 没报过的值一个都不发。
              *
-             * declared 升序排列 —— 滑动条的下标是「第几档」,顺序即档位高低;
-             * 原先给 select 用的是降序(大的在前),滑块必须反过来,否则
-             * 往右拖反而变小。
+             * stops 升序,而且第 0 位是「起点」而不是档位 —— 起点标 0,
+             * 只用来把轨道铺满(否则模型只剩一档时连条都画不出来),
+             * 拖到它上面不写任何东西。真实档位从下标 1 起,所以顺序即
+             * 档位高低;原先给 select 用的是降序(大的在前),滑块必须
+             * 反过来,否则往右拖反而变小。
              */
             const declared = [...new Set(model.supportedContextWindows ?? (capacity !== undefined ? [capacity] : []))].sort((a, b) => a - b)
+            const stops = [0, ...declared]
             const effective = capacity ?? model.defaultContextWindow
             /*
              * 当前档位的下标。override 不在声明列表里时(上游改了口径、或
              * 旧配置留下了裸值),退回最近的一档只用于「把手停在哪」,不会
              * 因为渲染而回写任何东西 —— 写回只发生在用户真的拖动之后。
              */
-            const currentIndex = effective === undefined
+            const nearest = effective === undefined || effective <= 0
               ? 0
               : declared.indexOf(effective) !== -1
                 ? declared.indexOf(effective)
                 : declared.reduce((best, choice, index) =>
                     Math.abs(choice - effective) < Math.abs(declared[best]! - effective) ? index : best, 0)
+            // 下标 0 是起点,不是档位;真实档位从 1 起,故整体后移一位。
+            const currentIndex = effective === undefined || effective <= 0 ? 0 : nearest + 1
             return (
               <div
                 key={model.id}
@@ -666,55 +671,65 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                          * 视觉层:轨道 + 已选填充 + 把手。真正的输入是下面那层
                          * 透明的 range input,拖拽、点击定位、方向键都由它接,
                          * 所以键盘可达性和原生行为都保持不变。
+                         *
+                         * 档位下标从 1 起 —— 0 号是「起点」而不是一个可调档位
+                         * (见上面 stops 的注释)。所有和像素有关的换算都统一用
+                         * stops,把手才停得准。
                          */}
                         <span className="qdp-windowTrack" aria-hidden="true">
                           <span
                             className="qdp-windowFill"
-                            style={{ width: `${String((currentIndex / (declared.length - 1)) * 100)}%` }}
+                            style={{ width: `${String((currentIndex / (stops.length - 1)) * 100)}%` }}
                           />
                           <span
                             className="qdp-windowKnob"
-                            style={{ left: `${String((currentIndex / (declared.length - 1)) * 100)}%` }}
+                            style={{ left: `${String((currentIndex / (stops.length - 1)) * 100)}%` }}
                           />
                           <input
                             className="qdp-windowInput"
                             type="range"
                             min={0}
-                            max={declared.length - 1}
+                            max={stops.length - 1}
                             step={1}
                             value={currentIndex}
                             disabled={busy}
                             aria-label={`${model.name} ${t('contextHeading')}`}
-                            aria-valuetext={formatTokens(declared[currentIndex] ?? 0)}
+                            aria-valuetext={currentIndex === 0 ? t('contextHeading') : formatTokens(stops[currentIndex] ?? 0)}
                             onChange={event => {
                               // 滑块的取值是档位下标,发出去的永远是那一档的
-                              // 真实 token 数 —— 上游字段的语义没有变。
-                              const choice = declared[Number(event.currentTarget.value)]
-                              if (choice !== undefined) onSetModelContextWindow(model.id, choice)
+                              // 真实 token 数 —— 上游字段的语义没有变。0 号是
+                              // 起点,不是一个档位,拖到它上面不写任何东西。
+                              const index = Number(event.currentTarget.value)
+                              const choice = stops[index]
+                              if (index > 0 && choice !== undefined) onSetModelContextWindow(model.id, choice)
                             }}
                           />
                         </span>
                         <span className="qdp-windowTicks" aria-hidden="true">
-                          {/* 只标首尾和中间一档,标满会糊成一片。 */}
-                          {declared.length <= 3
-                            ? declared.map((choice, index) => (
-                                <span
-                                  key={choice}
-                                  className="qdp-windowTick"
-                                  style={{ left: `${String((index / (declared.length - 1)) * 100)}%` }}
-                                >
-                                  {formatTokens(choice)}
-                                </span>
-                              ))
-                            : [0, Math.floor((declared.length - 1) / 2), declared.length - 1].map(index => (
-                                <span
-                                  key={declared[index]}
-                                  className="qdp-windowTick"
-                                  style={{ left: `${String((index / (declared.length - 1)) * 100)}%` }}
-                                >
-                                  {formatTokens(declared[index]!)}
-                                </span>
-                              ))}
+                          {/*
+                           * 首尾必定标出,中间最多再标一档,标满会糊成一片。
+                           * 0 号是起点,只画刻度线不印数字(需求:从 0 档开始
+                           * 显示条,但不显示 0 这个数字)。
+                           */}
+                          {(() => {
+                            const middle = Math.floor((stops.length - 1) / 2)
+                            const labelled = stops.length > 3 && middle > 0
+                              ? new Set([0, middle, stops.length - 1])
+                              : new Set(stops.map((_, index) => index))
+                            return stops.map((choice, index) => (
+                              <span
+                                key={index}
+                                className="qdp-windowTick"
+                                style={{ left: `${String((index / (stops.length - 1)) * 100)}%` }}
+                              >
+                                {index === 0 ? (
+                                  <span className="qdp-windowTickMark" />
+                                ) : labelled.has(index) ? (
+                                  formatTokens(choice!)
+                                ) : null}
+                              </span>
+                            ))
+                          })()}
                         </span>
                       </span>
                     )
