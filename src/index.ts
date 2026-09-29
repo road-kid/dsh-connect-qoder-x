@@ -1470,6 +1470,8 @@ export function apply(ctx: Context, config: Config): void {
   let setMaximumContextWindowCN: ((enabled: boolean) => Promise<{ state: string; reason?: string }>) | undefined
   let setModelsEnabled: ((options: { models: readonly string[]; enabled: boolean }) => Promise<{ state: string; reason?: string }>) | undefined
   let setModelsEnabledCN: ((options: { models: readonly string[]; enabled: boolean }) => Promise<{ state: string; reason?: string }>) | undefined
+  let setModelContextWindow: ((options: { model: string; window: number }) => Promise<{ state: string; reason?: string }>) | undefined
+  let setModelContextWindowCN: ((options: { model: string; window: number }) => Promise<{ state: string; reason?: string }>) | undefined
   /**
    * Point a variant at an account identity, invalidating whatever the previous
    * one left behind.
@@ -1710,6 +1712,10 @@ export function apply(ctx: Context, config: Config): void {
                 if (setModelsEnabledCN === undefined) return { state: 'failed', reason: 'settings are unavailable' }
                 return setModelsEnabledCN(opts)
               },
+              setModelContextWindow: async opts => {
+                if (setModelContextWindowCN === undefined) return { state: 'failed', reason: 'settings are unavailable' }
+                return setModelContextWindowCN(opts)
+              },
             }
           : {
               setMaximumContextWindow: async enabled => {
@@ -1719,6 +1725,10 @@ export function apply(ctx: Context, config: Config): void {
               setModelsEnabled: async opts => {
                 if (setModelsEnabled === undefined) return { state: 'failed', reason: 'settings are unavailable' }
                 return setModelsEnabled(opts)
+              },
+              setModelContextWindow: async opts => {
+                if (setModelContextWindow === undefined) return { state: 'failed', reason: 'settings are unavailable' }
+                return setModelContextWindow(opts)
               },
             },
       }, probeKey)
@@ -1799,6 +1809,30 @@ export function apply(ctx: Context, config: Config): void {
     }
     setMaximumContextWindowCN = async enabled => {
       write({ useMaximumContextWindowCN: enabled })
+      return { state: 'updated' }
+    }
+    /**
+     * Per-model window write, landed in the same settings field the multi
+     * variant already reads (`modelContextWindows[CN]`) — the catalog honours
+     * an override over the account-wide preference, so one model can take the
+     * larger declared window while the rest keep the default.
+     *
+     * `window === 0` deletes the key rather than storing a zero: the catalog
+     * skips non-positive overrides, and an absent key is the honest spelling
+     * of 「no override」.
+     */
+    setModelContextWindow = async ({ model, window }) => {
+      const windows = { ...((readConfigField(current(), 'modelContextWindows') as Record<string, number> | undefined) ?? {}) }
+      if (window > 0) windows[model] = window
+      else delete windows[model]
+      write({ modelContextWindows: windows })
+      return { state: 'updated' }
+    }
+    setModelContextWindowCN = async ({ model, window }) => {
+      const windows = { ...((readConfigField(current(), 'modelContextWindowsCN') as Record<string, number> | undefined) ?? {}) }
+      if (window > 0) windows[model] = window
+      else delete windows[model]
+      write({ modelContextWindowsCN: windows })
       return { state: 'updated' }
     }
     setModelsEnabled = async ({ models, enabled }) => {

@@ -215,6 +215,49 @@ describe('probe control route', () => {
     expect(handled).toEqual({ models: ['model-a', 'model-b'], enabled: false })
   })
 
+  it('accepts set-model-context-window and forwards the model with its window', async () => {
+    let handled: { model: string; window: number } | undefined
+    const { origin, key } = await mount({
+      setModelContextWindow: async opts => {
+        handled = opts
+        return { state: 'updated' }
+      },
+    })
+    const result = await post(
+      origin,
+      { action: 'set-model-context-window', model: 'm1', window: 1_000_000 },
+      { 'x-qoder-probe-key': key },
+    )
+    expect(result).toMatchObject({ status: 200, body: { state: 'updated' } })
+    expect(handled).toEqual({ model: 'm1', window: 1_000_000 })
+  })
+
+  it('reads a zero window as "clear the override" and rejects a missing model', async () => {
+    let handled: { model: string; window: number } | undefined
+    const { origin, key } = await mount({
+      setModelContextWindow: async opts => {
+        handled = opts
+        return { state: 'updated' }
+      },
+    })
+    const cleared = await post(
+      origin,
+      { action: 'set-model-context-window', model: 'm1', window: 0 },
+      { 'x-qoder-probe-key': key },
+    )
+    expect(cleared.status).toBe(200)
+    expect(handled).toEqual({ model: 'm1', window: 0 })
+
+    // No model id: the route must refuse rather than write an unnamed override.
+    const refused = await post(
+      origin,
+      { action: 'set-model-context-window', window: 1_000_000 },
+      { 'x-qoder-probe-key': key },
+    )
+    expect(refused.status).toBe(400)
+    expect(refused.body['error']).toBe('invalid action')
+  })
+
   it('runs checkin and clear-checkin-logs actions when provided', async () => {
     let cleared = false
     let checkedIn = false

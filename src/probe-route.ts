@@ -51,6 +51,8 @@ export interface QoderProbeRouteOptions {
   setMaximumContextWindow?: (enabled: boolean) => Promise<{ state: string; reason?: string }>
   /** Enable or disable models for this variant. */
   setModelsEnabled?: (options: { models: readonly string[]; enabled: boolean }) => Promise<{ state: string; reason?: string }>
+  /** Write one model's context-window override (0 clears it back to default). */
+  setModelContextWindow?: (options: { model: string; window: number }) => Promise<{ state: string; reason?: string }>
   /** Drop every recorded check-in log entry for this variant. */
   clearCheckInLogs?: () => void
   /** Trigger manual check-in for this variant. */
@@ -117,6 +119,16 @@ function parseAction(text: string): QoderProbeAction | undefined {
     return typeof wrapped['enabled'] === 'boolean'
       ? { action: 'set-maximum-context-window', enabled: wrapped['enabled'] }
       : undefined
+  }
+  if (action === 'set-model-context-window') {
+    // Per-model window write. `window > 0` selects that many tokens; 0 clears
+    // the override so the model falls back to its declared default (the only
+    // two states the upstream honours — there is nothing in between).
+    const model = wrapped['model']
+    if (typeof model !== 'string' || model.trim() === '') return undefined
+    const raw = wrapped['window']
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return undefined
+    return { action: 'set-model-context-window', model: model.trim(), window: Math.floor(raw) }
   }
   if (action === 'set-models-enabled') {
     if (typeof wrapped['enabled'] !== 'boolean') return undefined
@@ -203,6 +215,14 @@ export function qoderProbeHandler(
           return
         }
         json(res, 200, await deps.setMaximumContextWindow(action.enabled === true))
+        return
+      }
+      if (action.action === 'set-model-context-window') {
+        if (deps.setModelContextWindow === undefined) {
+          json(res, 404, { error: 'model-context-window-setting-not-supported' })
+          return
+        }
+        json(res, 200, await deps.setModelContextWindow({ model: action.model as string, window: action.window ?? 0 }))
         return
       }
       if (action.action === 'set-models-enabled') {
