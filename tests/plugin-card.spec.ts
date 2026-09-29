@@ -323,6 +323,31 @@ describe('Qoder plugin card', () => {
     expect(tree).toContain('1M')
   })
 
+  it('still draws a track for a single declared size, unwritable', async () => {
+    statusBody = {
+      status: 'signed-in',
+      probeKey: 'test-probe-key',
+      authKey: 'test-auth-key',
+      models: [{ id: 'm1', name: 'M1', contextWindow: 200_000, supportedContextWindows: [200_000] }],
+    }
+    await mount()
+    await openPane(en.paneModels)
+    // One declared size used to fall back to a plain text label, which read
+    // as "the control is gone". With the origin stop there is always a track;
+    // the handle parks on the only real size and dragging to the origin (or
+    // anywhere) writes nothing, because there is no other size to reach.
+    const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
+    expect(slider).toBeDefined()
+    expect(slider!.props.value).toBe(1)
+    expect(slider!.props.max).toBe(1)
+    await act(async () => { slider!.props.onChange({ currentTarget: { value: '0' } }) })
+    expect(posts).toHaveLength(0)
+    // The size is still labelled, ascending, and the origin prints no digit.
+    const tree = JSON.stringify(view!.toJSON())
+    expect(tree).toContain('200K')
+    expect(tree).not.toContain('>0<')
+  })
+
   // ---- tabbed body -----------------------------------------------------------
 
   it('renders quota detail and context on the one page', async () => {

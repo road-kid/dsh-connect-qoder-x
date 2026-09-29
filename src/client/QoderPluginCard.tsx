@@ -659,14 +659,12 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                 <span className="qdp-contextPicker">
                   {declared.length > 0 ? (
                     /*
-                     * 档位多于一个才给滑块;只有一个档位时没有可拖的余地,
-                     * 印成文字反而诚实。多档时仍然只有声明过的档位可达 ——
-                     * 和原来的 select 是同一条约束,只是换了手势。
+                     * 每个有档位的模型都画轨道 —— 只有一个档位的模型也有条
+                     * (把手停在那一档,拖到起点 0 不写任何东西,所以事实上
+                     * 不可滑动),不能因为「没得拖」就退化成一行文字:用户
+                     * 要的是轨道始终可见,起点把轨道铺满正是为了这个。
                      */
-                    declared.length === 1 ? (
-                      <span className="qdp-modelMeta">{formatTokens(declared[0]!)}</span>
-                    ) : (
-                      <span className="qdp-windowSlider">
+                    <span className="qdp-windowSlider">
                         {/*
                          * 视觉层:轨道 + 已选填充 + 把手。真正的输入是下面那层
                          * 透明的 range input,拖拽、点击定位、方向键都由它接,
@@ -712,10 +710,15 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                            * 显示条,但不显示 0 这个数字)。
                            */}
                           {(() => {
-                            const middle = Math.floor((stops.length - 1) / 2)
-                            const labelled = stops.length > 3 && middle > 0
-                              ? new Set([0, middle, stops.length - 1])
-                              : new Set(stops.map((_, index) => index))
+                            /*
+                             * 标签:起点 0 永远只画刻度线。档位不超过 3 个时
+                             * 全部印出来(200K/400K/1M 一档不落 —— 上一版把
+                             * 起点也算进「最多三档」,400K 的标签就是这样丢
+                             * 的);更多档时才收敛到首、中、尾。
+                             */
+                            const labelled = declared.length <= 3
+                              ? new Set(declared.map((_, index) => index + 1))
+                              : new Set([1, 1 + Math.floor((declared.length - 1) / 2), stops.length - 1])
                             return stops.map((choice, index) => (
                               <span
                                 key={index}
@@ -731,8 +734,7 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                             ))
                           })()}
                         </span>
-                      </span>
-                    )
+                    </span>
                   ) : capacity !== undefined ? (
                     <span className="qdp-modelMeta">{formatTokens(capacity)}</span>
                   ) : null}
