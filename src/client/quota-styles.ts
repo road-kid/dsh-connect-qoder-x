@@ -249,9 +249,14 @@ export const QUOTA_CSS = `
 .qdp-modelEnable input{flex:none;margin:0;cursor:pointer}
 .qdp-modelCopy{flex-direction:column;gap:1px;min-width:0;display:flex}
 .qdp-modelName{font-size:13px;line-height:1.4;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The credit multiplier rides the name, quiet and slightly apart from it:
+   the name identifies the model, the rate is a secondary fact about it. */
+.qdp-modelRate{margin-left:6px;font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}
 /* The per-model window slider, shaped like Qoder's own control: a light
    green wash filling the groove up to a slim green bar handle. Green here is
-   the success tone Qoder uses for this control, not the blue brand fill. */
+   the success tone Qoder uses for this control, not the blue brand fill.
+   The width is fixed so every row's track is the same length and its stops
+   line up in one column down the list. */
 .qdp-windowSlider{flex-direction:column;gap:4px;flex:none;width:170px;display:flex}
 .qdp-windowTrack{position:relative;height:18px;display:flex;align-items:center}
 .qdp-windowTrack::before{content:"";position:absolute;left:0;right:0;height:8px;border-radius:3px;background:var(--dsw-alias-bg-layer-3);border:.5px solid var(--dsw-alias-border-l2)}

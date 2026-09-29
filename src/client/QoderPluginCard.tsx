@@ -325,6 +325,19 @@ function formatTokens(tokens: number): string {
 }
 
 /**
+ * A credit multiplier, spelled the way Qoder spells it: the number first, then
+ * `x` — `0x` for a free model, `0.1x`, `0.5x`, `1.4x`.
+ *
+ * The upstream's own label is `x<n>` (see `normalizeCredits`), but the user
+ * reads the rate as a price multiplier ("half price"), and every Qoder surface
+ * they compared against prints it after the number. Trailing zeros are dropped
+ * so `0.50` reads as `0.5`, and a whole number keeps no decimal point.
+ */
+function formatRate(factor: number): string {
+  return `${String(Number(factor.toFixed(2)))}x`
+}
+
+/**
  * Model visibility table with individual toggle switches and batch enable/disable controls.
  */
 /**
@@ -582,6 +595,32 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
     // fixed order across renders instead of swapping by array position.
     return byCapability !== 0 ? byCapability : a.id.localeCompare(b.id)
   })
+  /*
+   * 滑块的横轴是整张列表共用的,不是每行各画一条。
+   *
+   * 之前 stops 从本行自己的声明档位算出来,于是「只有 200K 一档」的模型
+   * 把 200K 铺在自己的轨道上(把手顶到最右),而 [200K,400K,1M] 的行把
+   * 同样三档摊开 —— 两行长度一样、刻度却对不齐,同一个 200K 落在不同的
+   * 列上,用户没法横向比较。现在按 token 的绝对值取一个全局端点:每行
+   * 用同样的像素宽度,刻度出现在 value/axisMax 的比例位置,200K 在所有
+   * 行里都停在同一列。
+   */
+  const axisMax = list.reduce((best, model) => {
+    const declaredMax = (model.supportedContextWindows ?? []).reduce((top, value) => (value > top ? value : top), 0)
+    const fallback = model.defaultContextWindow ?? model.contextWindow ?? 0
+    const rowMax = declaredMax > 0 ? declaredMax : fallback
+    return rowMax > best ? rowMax : best
+  }, 0)
+  /*
+   * 每一行画哪些刻度:优先用上游声明过的档位,再补上全局端点 —— 只画本行
+   * 档位的话,一档的模型刻度会散落在别处,又多出对不齐的问题;端点补进去
+   * 后所有行的关键刻度都落在同一列。最后加上 0 起点,0 是起点不是档位
+   * (见下面 stops 的注释),它负责把轨道铺满,拖上去不写任何东西。
+   */
+  const axisTicks = (declared: readonly number[]): number[] =>
+    [...new Set([0, ...declared, axisMax])]
+      .filter(value => Number.isFinite(value) && value >= 0 && value <= axisMax)
+      .sort((a, b) => a - b)
   return (
     <div className="qdp-list">
       {/* No pane title: the tab strip above already names this pane. The row
@@ -630,22 +669,38 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
              * 档位高低;原先给 select 用的是降序(大的在前),滑块必须
              * 反过来,否则往右拖反而变小。
              */
+            /*
+             * 刻度按全局横轴取,而不是只取本行的档位。行为上的两处要点:
+             *
+             * (a) 把手/刻度的位置一律用 value/axisMax 的比例,所以「只有
+             *     200K 一档」的模型,把手停在 200K 处而不是顶到最右 ——
+             *     最右是 axisMax(1M),它根本没这个档位。
+             * (b) 下标仍然保留 0 号起点,但它只用来铺满轨道;起点不可写,
+             *     真实档位是 axisTicks 里 >0 的那些。
+             *
+             * 用户可选的档位仍是「本行声明过的」:轴上多出来的中间刻度只是
+             * 让人对齐,不能因为别的行支持 1M 就允许这一行写 1M —— 发出去
+             * 的值必须在上游声明列表里,否则等于替上游发明档位。
+             */
             const declared = [...new Set(model.supportedContextWindows ?? (capacity !== undefined ? [capacity] : []))].sort((a, b) => a - b)
-            const stops = [0, ...declared]
+            const stops = axisTicks(declared)
+            const axisSpan = axisMax > 0 ? axisMax : 1
+            const ratioOf = (value: number): number => (value / axisSpan) * 100
             const effective = capacity ?? model.defaultContextWindow
             /*
-             * 当前档位的下标。override 不在声明列表里时(上游改了口径、或
-             * 旧配置留下了裸值),退回最近的一档只用于「把手停在哪」,不会
-             * 因为渲染而回写任何东西 —— 写回只发生在用户真的拖动之后。
+             * 把手停在哪:先看当前值是否正好落在某个刻度上;不在时(上游
+             * 改了口径、或旧配置留下裸值)退回最近的一档,只影响「把手画
+             * 在哪」,不会因为渲染而回写任何东西 —— 写回只发生在用户真的
+             * 拖动之后。
              */
             const nearest = effective === undefined || effective <= 0
               ? 0
-              : declared.indexOf(effective) !== -1
-                ? declared.indexOf(effective)
-                : declared.reduce((best, choice, index) =>
-                    Math.abs(choice - effective) < Math.abs(declared[best]! - effective) ? index : best, 0)
-            // 下标 0 是起点,不是档位;真实档位从 1 起,故整体后移一位。
-            const currentIndex = effective === undefined || effective <= 0 ? 0 : nearest + 1
+              : stops.reduce((best, choice, index) =>
+                  Math.abs(choice - effective) < Math.abs(stops[best]! - effective) ? index : best, 0)
+            const currentValue = effective === undefined || effective <= 0 ? 0 : stops[nearest] ?? 0
+            const currentIndex = stops.indexOf(currentValue)
+            // 可写档位:本行声明过的那些,按轴上的下标排列。
+            const writable = new Set(declared)
             return (
               <div
                 key={model.id}
@@ -660,7 +715,17 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                     onChange={event => { onSetModelsEnabled([model.id], event.currentTarget.checked) }}
                   />
                   <span className="qdp-modelCopy">
-                    <span className="qdp-modelName">{model.name}</span>
+                    <span className="qdp-modelName">
+                      {model.name}
+                      {/*
+                       * 积分消耗倍率(需求 2):直接用上游给的数字,格式化成
+                       * 「0.5x」这种写法。上游没说倍率时留空 —— 不猜一个
+                       * x1,那会把「不知道」说成「基准价」。
+                       */}
+                      {model.priceFactor === undefined ? null : (
+                        <span className="qdp-modelRate">{formatRate(model.priceFactor)}</span>
+                      )}
+                    </span>
                     <span className="qdp-modelMeta">{model.id}</span>
                   </span>
                 </label>
@@ -678,18 +743,18 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                          * 透明的 range input,拖拽、点击定位、方向键都由它接,
                          * 所以键盘可达性和原生行为都保持不变。
                          *
-                         * 档位下标从 1 起 —— 0 号是「起点」而不是一个可调档位
-                         * (见上面 stops 的注释)。所有和像素有关的换算都统一用
-                         * stops,把手才停得准。
+                         * 位置一律按 token 的绝对值占全轴的比例来算(不是按
+                         * 下标),这是「所有行的条一样长、同一档在同一列」的
+                         * 关键:轨道宽度是每行同样的像素,值决定刻度落在哪。
                          */}
                         <span className="qdp-windowTrack" aria-hidden="true">
                           <span
                             className="qdp-windowFill"
-                            style={{ width: `${String((currentIndex / (stops.length - 1)) * 100)}%` }}
+                            style={{ width: `${String(ratioOf(currentValue))}%` }}
                           />
                           <span
                             className="qdp-windowKnob"
-                            style={{ left: `${String((currentIndex / (stops.length - 1)) * 100)}%` }}
+                            style={{ left: `${String(ratioOf(currentValue))}%` }}
                           />
                           <input
                             className="qdp-windowInput"
@@ -700,14 +765,15 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                             value={currentIndex}
                             disabled={busy}
                             aria-label={`${model.name} ${t('contextHeading')}`}
-                            aria-valuetext={currentIndex === 0 ? t('contextHeading') : formatTokens(stops[currentIndex] ?? 0)}
+                            aria-valuetext={currentValue <= 0 ? t('contextHeading') : formatTokens(currentValue)}
                             onChange={event => {
-                              // 滑块的取值是档位下标,发出去的永远是那一档的
-                              // 真实 token 数 —— 上游字段的语义没有变。0 号是
-                              // 起点,不是一个档位,拖到它上面不写任何东西。
+                              // 滑块的取值是轴上下标,但发出去的永远是那一档
+                              // 的真实 token 数 —— 上游字段的语义没有变。轴上
+                              // 的 0 号是起点、别的行贡献的中间刻度也不是本行
+                              // 声明过的档位,这两类都不写任何东西。
                               const index = Number(event.currentTarget.value)
                               const choice = stops[index]
-                              if (index > 0 && choice !== undefined) onSetModelContextWindow(model.id, choice)
+                              if (choice !== undefined && writable.has(choice)) onSetModelContextWindow(model.id, choice)
                             }}
                           />
                         </span>
@@ -719,24 +785,26 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                            */}
                           {(() => {
                             /*
-                             * 标签:起点 0 永远只画刻度线。档位不超过 3 个时
-                             * 全部印出来(200K/400K/1M 一档不落 —— 上一版把
-                             * 起点也算进「最多三档」,400K 的标签就是这样丢
-                             * 的);更多档时才收敛到首、中、尾。
+                             * 标签只印本行声明过的档位,而且不超过 3 个就全部
+                             * 印出来(200K/400K/1M 一档不落 —— 上一版把起点
+                             * 也算进「最多三档」,400K 的标签就是这样丢的);
+                             * 更多档时才收敛到首、中、尾。轴上由别的行贡献的
+                             * 中间刻度不印数字 —— 那不是这一行能选的档位,
+                             * 印出来就是在暗示可以选。起点 0 只画刻度线。
                              */
                             const labelled = declared.length <= 3
-                              ? new Set(declared.map((_, index) => index + 1))
-                              : new Set([1, 1 + Math.floor((declared.length - 1) / 2), stops.length - 1])
+                              ? new Set(declared)
+                              : new Set([declared[0], declared[Math.floor((declared.length - 1) / 2)], declared[declared.length - 1]])
                             return stops.map((choice, index) => (
                               <span
                                 key={index}
                                 className="qdp-windowTick"
-                                style={{ left: `${String((index / (stops.length - 1)) * 100)}%` }}
+                                style={{ left: `${String(ratioOf(choice))}%` }}
                               >
-                                {index === 0 ? (
+                                {choice === 0 ? (
                                   <span className="qdp-windowTickMark" />
-                                ) : labelled.has(index) ? (
-                                  formatTokens(choice!)
+                                ) : labelled.has(choice) ? (
+                                  formatTokens(choice)
                                 ) : null}
                               </span>
                             ))
