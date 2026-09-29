@@ -230,6 +230,10 @@ export const QUOTA_CSS = `
 .qdp-contextPref{align-items:flex-start;gap:9px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5;padding:10px 12px;display:flex}
 .qdp-contextPrefCopy{flex-direction:column;gap:2px;display:flex}
 .qdp-contextPicker{align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;display:flex}
+/* Column headings for the model list, sitting on the divider the user drew
+   above the list: the rule separates the refresh toolbar from the list, and
+   the two captions name the columns the rows are laid out in. */
+.qdp-modelColumns{border-top:.5px solid var(--dsw-alias-border-l2);align-items:center;justify-content:space-between;gap:12px;padding:8px 12px 6px;display:flex;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
 /* Model rows as one framed list: rows are separated by hairlines INSIDE a
    single rounded frame (workbuddy's list shape) rather than each being its
    own filled chip, which read as a stack of unrelated boxes. The frame owns
@@ -245,15 +249,19 @@ export const QUOTA_CSS = `
 .qdp-modelEnable input{flex:none;margin:0;cursor:pointer}
 .qdp-modelCopy{flex-direction:column;gap:1px;min-width:0;display:flex}
 .qdp-modelName{font-size:13px;line-height:1.4;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* The per-model window slider (Qoder's own control shape): a filled track
-   with a handle and tick labels for each size the upstream declares. */
+/* The per-model window slider, shaped like Qoder's own control: a light
+   green wash filling the groove up to a slim green bar handle. Green here is
+   the success tone Qoder uses for this control, not the blue brand fill. */
 .qdp-windowSlider{flex-direction:column;gap:4px;flex:none;width:170px;display:flex}
 .qdp-windowTrack{position:relative;height:18px;display:flex;align-items:center}
-.qdp-windowTrack::before{content:"";position:absolute;left:0;right:0;height:4px;border-radius:999px;background:var(--dsw-alias-bg-layer-2)}
-.qdp-windowFill{position:absolute;left:0;height:4px;border-radius:999px;background:var(--dsw-alias-brand-primary)}
-/* The handle rides the fill's end; the native input sits transparently on
-   top so drag, click-to-seek and arrow keys all keep working. */
-.qdp-windowKnob{position:absolute;width:12px;height:12px;margin-left:-6px;border-radius:3px;background:var(--dsw-alias-bg-layer-3);border:2px solid var(--dsw-alias-brand-primary);box-sizing:border-box}
+.qdp-windowTrack::before{content:"";position:absolute;left:0;right:0;height:8px;border-radius:3px;background:var(--dsw-alias-bg-layer-3);border:.5px solid var(--dsw-alias-border-l2)}
+/* The wash runs from the left edge to the handle, so the travel in effect
+   reads at a glance even when the handle sits at stop 0. */
+.qdp-windowFill{position:absolute;left:0;height:8px;border-radius:3px;background:var(--dsw-alias-state-success-primary,#3e8e5a);opacity:.22}
+/* The handle is a slim vertical bar (Qoder's), not a round dot. It is inset
+   by half its width so stop 0 sits ON the left edge instead of hanging half
+   outside the track — which is what made it look unrendered at 0. */
+.qdp-windowKnob{position:absolute;width:4px;height:16px;border-radius:2px;background:var(--dsw-alias-state-success-primary,#3e8e5a);transform:translateX(-2px)}
 .qdp-windowInput{position:absolute;left:0;right:0;width:100%;height:18px;margin:0;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none}
 .qdp-windowInput:disabled{cursor:default}
 .qdp-windowTicks{position:relative;height:14px;font-size:11px;line-height:14px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}

@@ -353,7 +353,12 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
   /** Today's claim already happened (the upstream said so, or the log does). */
   const claimedToday = checkIn !== undefined && checkIn.status === 'claimed'
   return (
-    <div className="qdp-panel">
+    /*
+     * 不再有外框(需求 1,按 m02352 截图):上一版这里包了一层 qdp-panel,
+     * 两个框外面就多出一个「套壳框」。现在最外层就是并列的两个框本身;
+     * 错误行和通知不属于任何一个框,平铺在两栏之上/之下。
+     */
+    <>
       {creditsError === undefined ? null : <p className="qdp-error">{t('creditsError', { message: creditsError })}</p>}
       {/*
        * 两个框并列(需求 4,按 workbuddy 的 credit-panels 排版):
@@ -431,7 +436,7 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
           {checkInNotice === undefined ? null : <p className="qdp-body">{checkInNotice}</p>}
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -594,7 +599,17 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
       {list.length === 0 ? (
         <p className="qdp-body">{t('modelsNoModels')}</p>
       ) : (
-        <div className="qdp-modelList">
+        <>
+          {/*
+           * 列头(需求 3):横线把工具行与列表分开,线下列出两列的标题 ——
+           * 左边是被勾选的模型名,右边是这一行的上下文窗口滑块。没有列头时
+           * 右侧那排滑块看不出是什么,只能靠猜。
+           */}
+          <div className="qdp-modelColumns">
+            <span>{t('modelNameColumn')}</span>
+            <span>{t('contextHeading')}</span>
+          </div>
+          <div className="qdp-modelList">
           {list.map(model => {
             const isModelEnabled = !disabledModels.includes(model.id)
             const capacity = model.contextWindow
@@ -710,7 +725,8 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
               </div>
             )
           })}
-        </div>
+          </div>
+        </>
       )}
     </div>
   )
