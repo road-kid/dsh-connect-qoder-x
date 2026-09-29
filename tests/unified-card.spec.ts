@@ -129,27 +129,55 @@ describe('Unified Qoder Plugin Card', () => {
     })
   }
 
-  it('renders the page body with no title, intro, or disclosure chrome of its own', async () => {
+  it('draws the disclosure header on the page view, and nothing on the summary view', async () => {
     await mountUnified()
     const json = JSON.stringify(view!.toJSON())
-    // The body still carries the real controls; the account heading is gone
-    // (the account box's state line replaced it).
-    // But it draws no heading, no intro line, and no disclosure header. The
-    // Plugins page supplies the title from the package manifest and its own
-    // control is what opened this page; repeating any of that here would be a
-    // second, competing disclosure inside the page that already opened it.
-    //
-    // `unifiedTitle` ("Qoder") and `variantTabCN` ("China") are unassertable as
-    // substrings — both occur throughout the body's own text — so this checks the
-    // intro, which is unique, plus the structural absence of the disclosure.
-    expect(json).not.toContain(en.unifiedIntro)
-    // No DISCLOSURE chrome anywhere: the settings fold is gone (flat) and no
-    // section claims the page is collapsed. Selected tab-state: the China
-    // variant tab + the Models pane tab (the strip's only pane now — the
-    // usage panel moved above the strip, un-tabbed).
-    expect(view!.root.findAllByProps({ 'aria-expanded': true })).toHaveLength(0)
-    expect(view!.root.findAllByProps({ 'aria-expanded': false })).toHaveLength(0)
+    // 需求(m01317 第 1 条):设置页的卡片要有像 workbuddy 那样的展开大标题
+    // —— 图标 + 标题 + 说明 + 展开箭头,默认展开。所以这一版起卡片自身
+    // 就画 disclosure 头,标题行正当地重复一次 intro。
+    expect(json).toContain(en.unifiedIntro)
+    // 大标题默认展开:aria-expanded 为 true 的恰好是它 + 两个选中的 tab
+    // (国内版 tab 与「用量与签到」pane tab)。
+    const header = view!.root.findAll(n => n.props.className === 'qdp-cardHeader')[0]
+    expect(header).toBeDefined()
+    expect(header!.props['aria-expanded']).toBe(true)
+    // 展开态下卡片带 qdp-cardOpen。
+    const root = view!.root.findAll(n => typeof n.props.className === 'string' && n.props.className.includes('qdp-card '))[0]
+    expect(root!.props.className).toContain('qdp-cardOpen')
     expect(view!.root.findAllByProps({ 'aria-selected': true })).toHaveLength(2)
+  })
+
+  it('collapses the body when the header is clicked, and re-expands it', async () => {
+    await mountUnified()
+    const header = () => view!.root.findAll(n => n.props.className === 'qdp-cardHeader')[0]!
+    // 默认展开:正文在 DOM 里。
+    expect(JSON.stringify(view!.toJSON())).toContain(en.variantTabCN)
+    await act(async () => { header().props.onClick() })
+    // 收起后正文整体不渲染(不是 visibility 隐藏),卡片也不再有 open 态。
+    expect(header().props['aria-expanded']).toBe(false)
+    const json = JSON.stringify(view!.toJSON())
+    // The body's own controls are gone; note `variantTabCN` ("China") is NOT a
+    // usable marker here — it also occurs in the description line that stays.
+    expect(json).not.toContain(en.quotaPollLabel)
+    expect(json).not.toContain(en.patBoxLabel)
+    // 标题与说明仍在:收起的是正文,不是这个卡片的身份。
+    expect(json).toContain(en.unifiedIntro)
+    const root = view!.root.findAll(n => typeof n.props.className === 'string' && n.props.className.includes('qdp-card'))[0]
+    expect(root!.props.className).not.toContain('qdp-cardOpen')
+    // 再点一次回到展开态。
+    await act(async () => { header().props.onClick() })
+    expect(header().props['aria-expanded']).toBe(true)
+    expect(JSON.stringify(view!.toJSON())).toContain(en.variantTabCN)
+  })
+
+  it('labels the header toggle for assistive tech in both states', async () => {
+    await mountUnified()
+    const header = () => view!.root.findAll(n => n.props.className === 'qdp-cardHeader')[0]!
+    // 与 workbuddy 相同的做法:aria-label 说清这一按会发生什么 —— 展开时
+    // 写「收起」,收起时写「展开」,并带上标题,读屏才分得清是哪张卡。
+    expect(header().props['aria-label']).toBe(`${en.cardCollapse}: ${en.unifiedTitle}`)
+    await act(async () => { header().props.onClick() })
+    expect(header().props['aria-label']).toBe(`${en.cardExpand}: ${en.unifiedTitle}`)
   })
 
   it('renders only the one-liner when the owner asks for the summary view', async () => {
@@ -331,9 +359,10 @@ describe('Unified Qoder Plugin Card', () => {
       view = create(createElement(QoderPluginCard, props))
     })
 
-    // Expand the card
-    const headerBtn = view!.root.findAllByType('button')[0]!
-    await act(async () => { headerBtn.props.onClick() })
+    // 卡片默认展开(大标题初值 true),这里不需要再点开;原先的
+    // findAllByType('button')[0] 现在命中的是大标题本身,点下去反而会把
+    // 正文收起来 —— 那正是先前这一条断言失败的原因。
+    expect(view!.root.findAll(n => n.props.className === 'qdp-cardHeader')[0]!.props['aria-expanded']).toBe(true)
 
     // (a) Verify switches are disabled when not signed in (CN-scoped rows).
     const switches = view!.root.findAll(n => n.props.role === 'switch')
@@ -533,23 +562,27 @@ describe('Unified Qoder Plugin Card', () => {
     const states = view!.root.findAll(n => typeof n.props.children === 'string' && n.props.children.includes('+100 Credits'))
     expect(states.length).toBeGreaterThanOrEqual(1)
 
-    // Expand the log and verify its entries rendered
-    const logsBtn = view!.root.findAll(n => n.props.onClick && n.children.includes(en.checkInLogShow))[0]
-    expect(logsBtn).toBeDefined()
-    await act(async () => { logsBtn!.props.onClick() })
-    const amounts = view!.root.findAll(n => n.children.includes('+100'))
-    expect(amounts.length).toBeGreaterThanOrEqual(1)
+    // 需求(m01317 第 3 条):旧的日志展开/刷新/清空整套按钮已经删掉,改用
+    // 与「可用额度」并排的领取台账。
+    const ledgerHeading = view!.root.findAll(n => n.children.includes(en.ledgerHeading))
+    expect(ledgerHeading.length).toBeGreaterThanOrEqual(1)
+    // 旧三件套一个都不能再出现(日志展开、清空日志)。注意不能拿
+    // checkInRefresh 当探针:它的英文就是 "Refresh",与账号框自己那个刷新
+    // 按钮(以及设置里的「刷新模型列表」)同字,断言必然误伤。
+    expect(view!.root.findAll(n => n.children.includes(en.checkInLogShow))).toHaveLength(0)
+    expect(view!.root.findAll(n => n.children.includes(en.checkInClear))).toHaveLength(0)
+    // 台账按时间窗过滤:这条 fixture 的 timestamp 是 2023-11-15,早已落在
+    // 7/30 天窗口之外,所以台账正确地把它排除并给出空态文案 —— 旧的日志表
+    // 只证明「按过按钮」,台账回答的是「现在还握着哪些包、什么时候到期」,
+    // 过期的包本来就不该留在窗内。
+    expect(view!.root.findAll(n => n.children.includes(en.ledgerEmpty)).length).toBeGreaterThanOrEqual(1)
+    expect(view!.root.findAll(n => n.children.includes('+100'))).toHaveLength(0)
 
     // The day is already claimed in this fixture, so the claim button reads
     // 「今日已签到」 and is DISABLED — the action is not re-offered.
     const claimedBtn = view!.root.findAll(n => n.children.includes(en.checkInClaimedToday))[0]
     expect(claimedBtn).toBeDefined()
     expect(claimedBtn!.props.disabled).toBe(true)
-    const refreshBtn = view!.root.findAll(n => n.children.includes(en.checkInRefresh))
-    expect(refreshBtn.length).toBeGreaterThanOrEqual(1)
-    // 清空日志 sits with the expanded log, not on the status line.
-    const clearBtn = view!.root.findAll(n => n.children.includes(en.checkInClear))
-    expect(clearBtn.length).toBeGreaterThanOrEqual(1)
   })
 
   it('stores a typed check-in time as minutes past midnight in UTC+8', async () => {

@@ -175,7 +175,20 @@ export const QUOTA_CSS = `
 .qdp-card{list-style:none;border-width:.5px;border-style:solid;border-color:var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-3);transition:border-color .16s,background .16s}
 .qdp-card:hover{border-color:var(--dsw-alias-label-dimmed)}
 .qdp-cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}
-.qdp-cardBody{margin:0 16px;padding:12px 0 8px;display:flex;flex-direction:column;gap:18px}
+/* The disclosure header, shaped like workbuddy's .dsm-plugin-card-header:
+   one full-width button so the whole row toggles, with the icon and the
+   two-line title block on the left and the caret pushed right. */
+.qdp-cardHeader{align-items:center;gap:12px;width:100%;padding:14px 16px;border:0;background:none;color:inherit;cursor:pointer;text-align:left;display:flex}
+.qdp-cardHead{flex-direction:column;gap:4px;flex:1;min-width:0;display:flex}
+.qdp-cardTitle{font-size:15px;line-height:1.4;font-weight:600;color:var(--dsw-alias-label-primary)}
+.qdp-cardDescription{font-size:13px;line-height:1.45;color:var(--dsw-alias-label-tertiary)}
+.qdp-cardIcon{flex:none;width:32px;height:32px;border-radius:7px;display:block}
+/* A border-drawn caret rather than a host icon: the icon primitive's names
+   differ across DSH lines (0.1.5 Outline14 vs 0.1.7 OutlineRegular), so no
+   single static import serves both — the same reason workbuddy draws its own. */
+.qdp-cardChevron{flex:none;width:9px;height:9px;margin-right:4px;border-right:1.5px solid var(--dsw-alias-label-tertiary);border-bottom:1.5px solid var(--dsw-alias-label-tertiary);transform:rotate(45deg);transition:transform .16s}
+.qdp-cardChevronOpen{transform:rotate(225deg)}
+.qdp-cardBody{margin:0 16px;padding:12px 0 8px;border-top:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:18px}
 .qdp-h3{margin:0;font-size:13px;line-height:1.5;font-weight:600;color:var(--dsw-alias-label-primary)}
 .qdp-body{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
 .qdp-error{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
@@ -261,6 +274,15 @@ export const QUOTA_CSS = `
 /* Settings listed flat on the Usage pane: no fold, just grouped rows. */
 .qdp-settingsFlat{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px;gap:4px;display:flex;flex-direction:column}
 .qdp-settingsTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
+/* 可用额度与最近领取并列两栏:workbuddy 的 credit-panels 布局,窄屏回落单列。 */
+.qdp-twoUp{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:10px;align-items:start;display:grid}
+@media (max-width:760px){.qdp-twoUp{grid-template-columns:1fr}}
+/* 领取台账的一行:时间 · 数量 · 有效期。 */
+.qdp-ledgerRow{align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);display:flex}
+.qdp-ledgerDate{color:var(--dsw-alias-label-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}
+.qdp-ledgerAmount{flex:none;color:var(--dsw-alias-label-primary);font-weight:600;font-variant-numeric:tabular-nums}
+.qdp-ledgerExpiry{margin-left:auto;color:var(--dsw-alias-label-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}
+.qdp-ledgerExpired{color:var(--dsw-alias-state-error-primary)}
 
 @media (prefers-reduced-motion:reduce){.qdp-footFill,.qdp-barFill{transition:none}}
 `

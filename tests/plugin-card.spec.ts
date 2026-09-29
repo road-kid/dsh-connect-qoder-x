@@ -105,8 +105,10 @@ describe('Qoder plugin card', () => {
   async function mount(variant?: QoderCardVariant): Promise<void> {
     const props = { t, ...variant === undefined ? {} : { variant } } as unknown as Parameters<typeof QoderPluginCard>[0]
     await act(async () => { view = create(createElement(QoderPluginCard, props)) })
-    // Expand: the header is the first button.
-    await act(async () => { view!.root.findAllByType('button')[0]!.props.onClick() })
+    // 大标题默认展开(m01317 第 1 条),所以这里不再点任何按钮。旧版本为了
+    // 「把折叠的卡片打开」点了 findAllByType('button')[0],而那个位置现在正是
+    // 新的大标题 —— 点下去反而把正文收起来,整套断言随之找不到元素。
+    expect(view!.root.findAll(n => n.props.className === 'qdp-cardHeader')[0]!.props['aria-expanded']).toBe(true)
   }
 
   /** Switch the signed-in body's bottom pane (「用量与签到」 / 「模型」). */

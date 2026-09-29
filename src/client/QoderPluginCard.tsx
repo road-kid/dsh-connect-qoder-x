@@ -67,6 +67,16 @@ export interface QoderCardVariant {
   authPath: string
 }
 
+/*
+ * The card's icon, embedded as a data URI rather than imported from
+ * assets/icon.svg: the client bundle is a browser CJS module with no build-time
+ * asset pipeline (tsdown emits it with an inline `__ModuleLoader__.load`
+ * wrapper), so a URL import would resolve to nothing at runtime. workbuddy
+ * carries its own icon the same way. The SVG is the repository's assets/icon.svg
+ * verbatim — a rounded gradient tile with the bolt mark.
+ */
+const QODER_PLUGIN_ICON = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzYiIGhlaWdodD0iMzYiIHZpZXdCb3g9IjAgMCAzNiAzNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iMzQiIGhlaWdodD0iMzQiIHJ4PSI4IiBmaWxsPSJ1cmwoI2cpIiAvPjxwYXRoIGQ9Ik0xOS42IDcuNSAxMSAyMGg1LjZsLTEuNCA4LjVMMjQuNSAxNmgtNS42bC43LTguNVoiIGZpbGw9IiNGRkZGRkYiLz48Y2lyY2xlIGN4PSIyNS41IiBjeT0iMjUuNSIgcj0iMy4yIiBmaWxsPSIjNDVEOUU3Ii8+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMTgiIHkxPSIxIiB4Mj0iMTgiIHkyPSIzNSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiM3Q0I3RkYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxNDVBRjMiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4='
+
 /** China Qoder; the plugin's primary card and default. */
 export const QODER_CN_CARD: QoderCardVariant = {
   id: 'qoder',
@@ -186,6 +196,11 @@ function formatNumber(value: number): string {
 
 function formatPercent(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)
+}
+
+/** Date-only formatting for expiries: the day is what a validity window means. */
+function formatDate(ms: number): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(ms))
 }
 
 function formatTime(ms: number): string {
@@ -317,14 +332,13 @@ function formatTokens(tokens: number): string {
  * 是签到状态与动作(立即签到 / 刷新 / 展开日志 / 清除),签到状态直接印在
  * 行内。workbuddy credit-panel 的结构,按本插件的信息密度重排。
  */
-function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, clearing, checkInNotice, autoCheckIn, onCheckIn, onRefreshStatus, onClearLogs }: {
+function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, checkInNotice, autoCheckIn, onCheckIn }: {
   credits?: QoderWebCredits | undefined
   creditsError?: string | undefined
   checkIn?: Extract<QoderWebStatus, { status: 'signed-in' }>['checkIn'] | undefined
   t: QoderPluginCardInjected['t']
   busy?: boolean
   checkingIn?: boolean
-  clearing?: boolean
   checkInNotice?: string | undefined
   /**
    * Whether this variant's AUTOMATIC check-in toggle is on. The scheduler
@@ -335,10 +349,7 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
    */
   autoCheckIn?: boolean
   onCheckIn: () => void
-  onRefreshStatus: () => void
-  onClearLogs: () => void
 }): React.ReactNode {
-  const [logsOpen, setLogsOpen] = useState(false)
   /** Today's claim already happened (the upstream said so, or the log does). */
   const claimedToday = checkIn !== undefined && checkIn.status === 'claimed'
   const lastStateText = checkIn === undefined ? undefined : checkIn.status === 'claimed'
@@ -351,6 +362,13 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
   return (
     <div className="qdp-panel">
       {creditsError === undefined ? null : <p className="qdp-error">{t('creditsError', { message: creditsError })}</p>}
+      {/*
+       * 两栏并列:左「可用额度」,右「最近领取」。workbuddy 的 credit-panels
+       * 布局 —— 把「我还有什么」和「这些是怎么来的、什么时候过期」放在同一
+       * 屏,不必来回切 tab。窄屏由 .qdp-twoUp 的断点回落到单列。
+       */}
+      <div className="qdp-twoUp">
+      <div className="qdp-panel">
       {credits === undefined ? null : (
         <>
           <div className="qdp-panelHead">
@@ -387,9 +405,12 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
             ))}
         </>
       )}
+      </div>
+      <CheckInLedger logs={checkIn?.logs} t={t} />
+      </div>
       {/*
-       * 签到区:状态行 + 动作按钮一行放下,日志可展开。原折叠头版本把「今日
-       * 是否已签」藏在了展开后的表格里;它现在直接印在状态行。
+       * 签到区:状态行 + 动作按钮一行放下。原折叠头版本把「今日是否已签」
+       * 藏在了展开后的表格里;它现在直接印在状态行,而领取明细在右侧台账。
        */}
       <div className="qdp-panelDivide qdp-checkinLine">
         <div className="qdp-checkinState">
@@ -413,37 +434,81 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
           >
             {checkingIn ? t('checkInChecking') : claimedToday ? t('checkInClaimedToday') : t('checkInNow')}
           </button>
-          <button type="button" className="qdp-btn" disabled={busy || checkingIn} onClick={onRefreshStatus}>
-            {busy ? t('checkInRefreshing') : t('checkInRefresh')}
-          </button>
-          <button
-            type="button"
-            className="qdp-btn"
-            disabled={busy || clearing || checkIn?.logs === undefined || checkIn.logs.length === 0}
-            onClick={() => { setLogsOpen(value => !value) }}
-          >
-            {logsOpen ? t('checkInLogHide') : t('checkInLogShow')}
-          </button>
         </div>
       </div>
       {checkInNotice === undefined ? null : <p className="qdp-body">{checkInNotice}</p>}
-      {/*
-       * 展开的日志区:只有日志表和一个清空按钮。签到动作(立即签到/刷新)在
-       * 上一行,这里不再重复;「签到日志」标题也只在上一行出现一次。
-       */}
-      {!logsOpen || checkIn?.logs === undefined ? null : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+    </div>
+  )
+}
+
+/**
+ * 最近的签到记录(BOX):插件内每次签到领取到的资源包、数量与到期时间。
+ *
+ * 这是原来「签到日志」表格的替代:表格只能证明「点过按钮」,而这里回答的是
+ * 用户真正关心的问题 —— 我手上有哪些还没过期的资源包,各自什么时候作废。
+ * 因此按「领取时间」倒序列出,并在每行右侧给出该笔的到期日(上游未给有效期
+ * 时显示未知,不猜)。
+ */
+function CheckInLedger({ logs, t }: {
+  logs: readonly {
+    id: string
+    date: string
+    timestamp: number
+    status: string
+    amount?: number | undefined
+    expiresAtMs?: number | undefined
+  }[] | undefined
+  t: QoderPluginCardInjected['t']
+}): React.ReactNode {
+  const [days, setDays] = useState<7 | 30>(7)
+  const now = Date.now()
+  const cutoff = now - days * 24 * 60 * 60 * 1000
+  // 已领取的记录才入账:no-campaign / error 不是资源包,列出来只会让人以为
+  // 领到了什么。
+  const claimed = (logs ?? [])
+    .filter(entry => entry.status === 'claimed' || entry.status === 'already-claimed')
+    .filter(entry => entry.timestamp >= cutoff)
+    .sort((a, b) => b.timestamp - a.timestamp)
+  const total = claimed.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
+  return (
+    <div className="qdp-panel">
+      <div className="qdp-panelHead">
+        <h3 className="qdp-panelTitle">{t('ledgerHeading')}</h3>
+        <span className="qdp-seg" style={{ padding: 2, gap: 2, margin: 0 }}>
+          {([7, 30] as const).map(option => (
             <button
+              key={option}
               type="button"
-              className="qdp-btn"
-              disabled={busy || clearing}
-              onClick={onClearLogs}
+              className={days === option ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
+              style={{ padding: '2px 8px', fontSize: 11, lineHeight: '16px', flex: 'none' }}
+              onClick={() => { setDays(option) }}
             >
-              {clearing ? t('checkInClearing') : t('checkInClear')}
+              {t(option === 7 ? 'ledgerRange7' : 'ledgerRange30')}
             </button>
-          </div>
-          <CheckInLogTable logs={checkIn.logs} t={t} />
+          ))}
+        </span>
+      </div>
+      <p className="qdp-panelMeta">
+        {claimed.length === 0 ? t('ledgerEmpty') : t('ledgerSummary', { count: claimed.length, amount: total })}
+      </p>
+      {claimed.length === 0 ? null : (
+        <div className="qdp-logList">
+          {claimed.map(entry => {
+            const expired = entry.expiresAtMs !== undefined && entry.expiresAtMs <= now
+            return (
+              <div key={entry.id} className="qdp-ledgerRow">
+                <span className="qdp-ledgerDate">{formatTime(entry.timestamp)}</span>
+                <span className="qdp-ledgerAmount">{entry.amount === undefined ? '—' : `+${entry.amount}`}</span>
+                <span className={expired ? 'qdp-ledgerExpiry qdp-ledgerExpired' : 'qdp-ledgerExpiry'}>
+                  {entry.expiresAtMs === undefined
+                    ? t('ledgerExpiryUnknown')
+                    : expired
+                      ? t('ledgerExpired')
+                      : t('ledgerExpiresAt', { date: formatDate(entry.expiresAtMs) })}
+                </span>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -568,63 +633,6 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
   )
 }
 
-function CheckInLogTable({
-  logs = [],
-  t,
-}: {
-  logs?: readonly {
-    id: string
-    date: string
-    timestamp: number
-    status: string
-    amount?: number | undefined
-    message?: string | undefined
-  }[] | undefined
-  t: QoderPluginCardInjected['t']
-}): React.ReactNode {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div className="qdp-checkinHead">
-        <span style={{ flex: 2 }}>{t('checkInLogTime')}</span>
-        <span style={{ flex: 3 }}>{t('checkInLogResult')}</span>
-        <span style={{ flex: 1, textAlign: 'right' }}>{t('checkInLogAmount')}</span>
-      </div>
-      {logs.map(log => (
-        <div key={log.id} className="qdp-checkinRow">
-          <span style={{ flex: 2, color: 'var(--dsw-alias-label-secondary)' }}>{formatTime(log.timestamp)}</span>
-          <span style={{ flex: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              flexShrink: 0,
-              background: log.status === 'claimed'
-                ? 'var(--dsw-alias-status-success, #52c41a)'
-                : log.status === 'already-claimed'
-                  ? 'var(--dsw-alias-status-info, #1890ff)'
-                  : log.status === 'no-campaign'
-                    ? 'var(--dsw-alias-label-tertiary, #999)'
-                    : 'var(--dsw-alias-status-error, #f5222d)',
-            }} />
-            <span>
-              {log.status === 'claimed'
-                ? t('autoCheckInStatusClaimed', { amount: log.amount ?? 100 })
-                : log.status === 'already-claimed'
-                  ? t('autoCheckInStatusAlready')
-                  : log.status === 'no-campaign'
-                    ? t('autoCheckInStatusNoCampaign')
-                    : t('autoCheckInStatusError', { message: log.message ?? '' })}
-            </span>
-          </span>
-          <span style={{ flex: 1, textAlign: 'right', fontWeight: 600, color: log.amount ? 'var(--dsw-alias-brand-primary)' : 'inherit' }}>
-            {log.amount ? `+${log.amount}` : '-'}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /**
  * Render Qoder PAT state, quota, catalog, and context capacities as the Plugins
  * page's configuration page (or its one-liner, when the owner asks for
@@ -740,6 +748,12 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   const [variantEnabled, setVariantEnabled] = useState<{ cn: boolean; global: boolean }>({ cn: true, global: true })
   const cnEnabled = variantEnabled.cn
   const globalEnabled = variantEnabled.global
+  /**
+   * 大标题的展开态(workbuddy 的 .dsm-plugin-card-header)。默认展开:这是
+   * 设置页的卡片,收起只是让用户把注意力让给别的插件。列表视图(摘要)不
+   * 参与,所以初值直接给 true。
+   */
+  const [headerOpen, setHeaderOpen] = useState(true)
   const mounted = useRef(true)
   const readSeq = useRef(0)
   const manualControllers = useRef(new Set<AbortController>())
@@ -1156,6 +1170,9 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   // description text has to come from here either way.
   const cardIntro = isUnified ? t('unifiedIntro') : t(currentVariant.introKey)
 
+  /* 大标题的两行文案:统一卡片用统一标题,分体卡片用各自的标题。 */
+  const cardTitle = isUnified ? t('unifiedTitle') : t(currentVariant.titleKey)
+
   const label = status === undefined
     ? t('loading')
     : status.status === 'signed-in'
@@ -1200,8 +1217,33 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
       /* Hover lives in the .qdp-card:hover rule; the open tone is the class
          pair below. No inline border juggling — the CSSOM shorthand pitfall
          the old object comments describe cannot occur in a stylesheet. */
-      className="qdp-card qdp-cardOpen"
+      className={headerOpen ? 'qdp-card qdp-cardOpen' : 'qdp-card'}
     >
+      {/*
+       * 大标题(workbuddy 的 .dsm-plugin-card-header):整行是一个 button,
+       * 图标 + 标题 + 说明在左,展开箭头推到右边;默认展开。箭头是纯 CSS 画的
+       * (见 .qdp-cardChevron 的注释),不引宿主图标原语。
+       */}
+      <button
+        type="button"
+        className="qdp-cardHeader"
+        aria-expanded={headerOpen}
+        aria-label={`${headerOpen ? t('cardCollapse') : t('cardExpand')}: ${cardTitle}`}
+        onClick={() => { setHeaderOpen(open => !open) }}
+      >
+        {/* 图标用 data URI 内嵌:客户端 bundle 不能依赖构建期的资源管道,
+            与 workbuddy 把图标常量写进 bundle 的做法一致。 */}
+        <img className="qdp-cardIcon" src={QODER_PLUGIN_ICON} alt="" aria-hidden="true" />
+        <span className="qdp-cardHead">
+          <span className="qdp-cardTitle">{cardTitle}</span>
+          <span className="qdp-cardDescription">{cardIntro}</span>
+        </span>
+        <span
+          className={headerOpen ? 'qdp-cardChevron qdp-cardChevronOpen' : 'qdp-cardChevron'}
+          aria-hidden="true"
+        />
+      </button>
+      {headerOpen ? (
       <div className="qdp-cardBody">
         {isUnified ? (
           <>
@@ -1334,11 +1376,8 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                   t={t}
                   busy={busy}
                   checkingIn={checkingIn}
-                  clearing={clearingLogs}
                   checkInNotice={checkInNotice}
                   onCheckIn={() => { void manualCheckIn() }}
-                  onRefreshStatus={() => { void manualRefresh() }}
-                  onClearLogs={() => { void clearCheckInLogs() }}
                 />
                 {/*
                  * 「用量与签到 | 模型」双栏:用量面板已上移到 tab 之外(打开
@@ -1418,6 +1457,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
             : null}
           {status?.status === 'error' ? <p className="qdp-error">{status.message}</p> : null}
       </div>
+      ) : null}
     </div>
   )
 }
