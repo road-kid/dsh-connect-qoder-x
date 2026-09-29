@@ -188,7 +188,10 @@ export const QUOTA_CSS = `
    single static import serves both — the same reason workbuddy draws its own. */
 .qdp-cardChevron{flex:none;width:9px;height:9px;margin-right:4px;border-right:1.5px solid var(--dsw-alias-label-tertiary);border-bottom:1.5px solid var(--dsw-alias-label-tertiary);transform:rotate(45deg);transition:transform .16s}
 .qdp-cardChevronOpen{transform:rotate(225deg)}
-.qdp-cardBody{margin:0 16px;padding:12px 0 8px;border-top:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:18px}
+/* No border-top: the host already draws a rule under the header row, so one
+   here read as a second, doubled line across the card (and looked like an
+   outer box around the panes). The rule belongs to whoever draws the header. */
+.qdp-cardBody{margin:0 16px;padding:12px 0 8px;display:flex;flex-direction:column;gap:18px}
 .qdp-h3{margin:0;font-size:13px;line-height:1.5;font-weight:600;color:var(--dsw-alias-label-primary)}
 .qdp-body{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
 .qdp-error{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
@@ -227,7 +230,35 @@ export const QUOTA_CSS = `
 .qdp-contextPref{align-items:flex-start;gap:9px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5;padding:10px 12px;display:flex}
 .qdp-contextPrefCopy{flex-direction:column;gap:2px;display:flex}
 .qdp-contextPicker{align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;display:flex}
-.qdp-modelRow{align-items:center;justify-content:space-between;gap:12px;border-radius:6px;background:var(--dsw-alias-bg-layer-2);padding:8px 10px;display:flex}
+/* Model rows as one framed list: rows are separated by hairlines INSIDE a
+   single rounded frame (workbuddy's list shape) rather than each being its
+   own filled chip, which read as a stack of unrelated boxes. The frame owns
+   the radius and the border; the rows own the dividers. */
+.qdp-modelList{border:.5px solid var(--dsw-alias-border-l4);border-radius:10px;background:var(--dsw-alias-bg-layer-3);overflow:hidden}
+.qdp-modelRow{align-items:flex-start;justify-content:space-between;gap:12px;background:none;border-radius:0;padding:10px 12px;display:flex}
+.qdp-modelRow + .qdp-modelRow{border-top:.5px solid var(--dsw-alias-border-l2)}
+/* The row's left half: the visibility checkbox plus the two-line name/id
+   block. These classes were referenced by the card from the start but never
+   had rules, so the block rendered with browser defaults; stated properly
+   here as part of the framed-list restyle. */
+.qdp-modelEnable{align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer;display:flex}
+.qdp-modelEnable input{flex:none;margin:0;cursor:pointer}
+.qdp-modelCopy{flex-direction:column;gap:1px;min-width:0;display:flex}
+.qdp-modelName{font-size:13px;line-height:1.4;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The per-model window slider (Qoder's own control shape): a filled track
+   with a handle and tick labels for each size the upstream declares. */
+.qdp-windowSlider{flex-direction:column;gap:4px;flex:none;width:170px;display:flex}
+.qdp-windowTrack{position:relative;height:18px;display:flex;align-items:center}
+.qdp-windowTrack::before{content:"";position:absolute;left:0;right:0;height:4px;border-radius:999px;background:var(--dsw-alias-bg-layer-2)}
+.qdp-windowFill{position:absolute;left:0;height:4px;border-radius:999px;background:var(--dsw-alias-brand-primary)}
+/* The handle rides the fill's end; the native input sits transparently on
+   top so drag, click-to-seek and arrow keys all keep working. */
+.qdp-windowKnob{position:absolute;width:12px;height:12px;margin-left:-6px;border-radius:3px;background:var(--dsw-alias-bg-layer-3);border:2px solid var(--dsw-alias-brand-primary);box-sizing:border-box}
+.qdp-windowInput{position:absolute;left:0;right:0;width:100%;height:18px;margin:0;opacity:0;cursor:pointer;-webkit-appearance:none;appearance:none}
+.qdp-windowInput:disabled{cursor:default}
+.qdp-windowTicks{position:relative;height:14px;font-size:11px;line-height:14px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}
+.qdp-windowTick{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.qdp-windowValue{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
 .qdp-track{height:8px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-bg-layer-2)}
 .qdp-checkinRow{align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex}
 .qdp-checkinHead{border-bottom:1px solid var(--dsw-alias-border-l2);padding-bottom:6px;font-size:12px;color:var(--dsw-alias-label-tertiary);display:flex}
@@ -254,9 +285,6 @@ export const QUOTA_CSS = `
 .qdp-modelMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;white-space:nowrap}
 /* Per-model context picker: a compact select like workbuddy's account
    picker, sharing the select-wrap caret pattern. */
-.qdp-modelSelect{appearance:none;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-3);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:3px 22px 3px 8px;cursor:pointer}
-.qdp-modelSelect:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
-.qdp-modelSelect:disabled{opacity:.5;cursor:default}
 /* Variant tabs with an enable checkbox per side (workbuddy tab-switch). */
 .qdp-segCell{align-items:center;gap:2px;flex:1;min-width:0;display:flex}
 .qdp-segSwitch{display:inline-flex;align-items:center;flex:none;padding:0 8px 0 2px;cursor:pointer}
@@ -279,6 +307,12 @@ export const QUOTA_CSS = `
 @media (max-width:760px){.qdp-twoUp{grid-template-columns:1fr}}
 /* 领取台账的一行:左边日期,右边到期情况(与需求 4 的排版一致)。 */
 .qdp-ledgerRow{align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);display:flex}
+/*
+ * 台账本体占满左框的剩余高度,超出就滚动而不是把框撑长(需求 1:
+ * 界面能显示几条显示几条)。行高 18px + 行距 6px,9 行 ≈ 216px;
+ * 底部的「3 天内到期」小结只占自己一行,高度都留给上面的列表。
+ */
+.qdp-ledgerList{max-height:216px;overflow-y:auto}
 .qdp-ledgerDate{color:var(--dsw-alias-label-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}
 .qdp-ledgerAmount{flex:none;color:var(--dsw-alias-label-primary);font-weight:600;font-variant-numeric:tabular-nums}
 .qdp-ledgerExpiry{margin-left:auto;color:var(--dsw-alias-label-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}

@@ -352,13 +352,6 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
 }): React.ReactNode {
   /** Today's claim already happened (the upstream said so, or the log does). */
   const claimedToday = checkIn !== undefined && checkIn.status === 'claimed'
-  const lastStateText = checkIn === undefined ? undefined : checkIn.status === 'claimed'
-    ? t('autoCheckInStatusClaimed', { amount: checkIn.amount ?? 100 })
-    : checkIn.status === 'already-claimed'
-      ? t('autoCheckInStatusAlready')
-      : checkIn.status === 'no-campaign'
-        ? t('autoCheckInStatusNoCampaign')
-        : t('autoCheckInStatusError', { message: checkIn.message ?? '' })
   return (
     <div className="qdp-panel">
       {creditsError === undefined ? null : <p className="qdp-error">{t('creditsError', { message: creditsError })}</p>}
@@ -412,19 +405,15 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
             </>
           )}
           {/*
-           * 签到区:状态行在按钮上方,按钮占满整行贴在额度下面(需求 4)。
-           * 原折叠头版本把「今日是否已签」藏在展开后的表格里;它现在印在
-           * 按钮上方,而领取明细在左侧台账。
+           * 签到状态行只印「下次自动领取」。
+           *
+           * 原来这里印 「今日：{state}」,但 state 说的是插件自己的状态机,
+           * 用户手动点的签到也会被它写成「今日已自动签到」—— 把用户的操作
+           * 说成自动的,是错的。而「今天领过没有」按钮自己已经表达完了:
+           * 领过就是灰的。所以状态文本直接去掉,不再用文字复述按钮。
            */}
-          {lastStateText === undefined && !(autoCheckIn === true && checkIn?.nextRunAt !== undefined) ? null : (
-            <p className="qdp-panelMeta">
-              {[
-                lastStateText === undefined ? null : t('checkInLastToday', { state: lastStateText }),
-                autoCheckIn === true && checkIn?.nextRunAt !== undefined
-                  ? t('checkInNextRun', { time: formatTime(checkIn.nextRunAt) })
-                  : null,
-              ].filter(Boolean).join(' · ')}
-            </p>
+          {autoCheckIn !== true || checkIn?.nextRunAt === undefined ? null : (
+            <p className="qdp-panelMeta">{t('checkInNextRun', { time: formatTime(checkIn.nextRunAt) })}</p>
           )}
           {/*
            * 「立即领取」 is an ACTION: once today's claim is in, re-offering it
@@ -447,6 +436,13 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
 }
 
 /**
+ * 「3 天内到期」的统计窗口。30 天有效期的包还剩 20 天才到期,不该出现在
+ * 「3 天内到期」里 —— 这里统计的是窗口内真的会作废的笔,不是「所有还没过期的」。
+ * workbuddy 的「最近 3 天到期」就是这个读法。
+ */
+const SOON_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
+
+/**
  * 最近的签到记录(BOX):插件内每次签到领取到的资源包、数量与到期时间。
  *
  * 这是原来「签到日志」表格的替代:表格只能证明「点过按钮」,而这里回答的是
@@ -465,45 +461,35 @@ function CheckInLedger({ logs, t }: {
   }[] | undefined
   t: QoderPluginCardInjected['t']
 }): React.ReactNode {
-  const [days, setDays] = useState<7 | 30>(7)
   const now = Date.now()
-  const cutoff = now - days * 24 * 60 * 60 * 1000
-  // 已领取的记录才入账:no-campaign / error 不是资源包,列出来只会让人以为
-  // 领到了什么。
-  const claimed = (logs ?? [])
-    .filter(entry => entry.status === 'claimed' || entry.status === 'already-claimed')
-    .filter(entry => entry.timestamp >= cutoff)
-    .sort((a, b) => b.timestamp - a.timestamp)
-  const total = claimed.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
   /*
-   * 「还握着多少还没到期的」是台账真正要回答的问题,所以底部小结按到期日
-   * 统计,而不是按领取日。已过期的笔不计入 —— 它们已经作废,算进去只会
-   * 把可用额度说大。
+   * 界面能显示几条就显示几条:不再有 7/30 天切换,也不再按时间窗过滤。
+   * 台账回答的是「我手上有哪些资源包」,把窗口做成按钮只是把同一个列表切成
+   * 两半,用户还得猜哪一半是对的。条数由 CSS 的行高上限决定(见
+   * .qdp-ledgerList 的 max-height),多了就滚动 —— 而不是悄悄丢掉。
    */
-  const live = claimed.filter(entry => entry.expiresAtMs !== undefined && entry.expiresAtMs > now)
-  const liveTotal = live.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
+  const claimed = (logs ?? [])
+    // 已领取的记录才入账:no-campaign / error 不是资源包,列出来只会让人以为
+    // 领到了什么。
+    .filter(entry => entry.status === 'claimed' || entry.status === 'already-claimed')
+    .sort((a, b) => b.timestamp - a.timestamp)
+  /*
+   * 「3 天内到期」只统计在这个窗口内真的会作废的笔 —— 不是「所有还没过期的」。
+   * workbuddy 的「最近 3 天到期」就是这个读法:30 天有效期的包还剩 20 天才
+   * 到期,它不该出现在「3 天内到期」里。上游没给有效期的笔无法判断,不计入。
+   */
+  const expiringSoon = claimed.filter(entry =>
+    entry.expiresAtMs !== undefined && entry.expiresAtMs > now && entry.expiresAtMs <= now + SOON_WINDOW_MS)
+  const expiringSoonTotal = expiringSoon.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
   return (
     <div className="qdp-panel">
       <div className="qdp-panelHead">
         <h3 className="qdp-panelTitle">{t('ledgerHeading')}</h3>
-        <span className="qdp-seg" style={{ padding: 2, gap: 2, margin: 0 }}>
-          {([7, 30] as const).map(option => (
-            <button
-              key={option}
-              type="button"
-              className={days === option ? 'qdp-segItem qdp-segItemActive' : 'qdp-segItem'}
-              style={{ padding: '2px 8px', fontSize: 11, lineHeight: '16px', flex: 'none' }}
-              onClick={() => { setDays(option) }}
-            >
-              {t(option === 7 ? 'ledgerRange7' : 'ledgerRange30')}
-            </button>
-          ))}
-        </span>
       </div>
       {claimed.length === 0 ? (
         <p className="qdp-panelMeta">{t('ledgerEmpty')}</p>
       ) : (
-        <div className="qdp-logList">
+        <div className="qdp-logList qdp-ledgerList">
           {claimed.map(entry => {
             const expired = entry.expiresAtMs !== undefined && entry.expiresAtMs <= now
             return (
@@ -522,10 +508,11 @@ function CheckInLedger({ logs, t }: {
           })}
         </div>
       )}
-      {/* 底部到期小结:与上面的记录行用一条分隔线断开(需求 4 的排版)。 */}
+      {/* 底部到期小结:与上面的记录行用一条分隔线断开,只占 3 行的空间,
+          剩下的高度留给上面的记录列表。 */}
       <div className="qdp-ledgerFoot">
-        <span className="qdp-panelMeta">{t('ledgerExpiringHeading', { days: String(days) })}</span>
-        <span className="qdp-ledgerFootValue">{live.length === 0 ? '0' : String(liveTotal)}</span>
+        <span className="qdp-panelMeta">{t('ledgerExpiringHeading')}</span>
+        <span className="qdp-ledgerFootValue">{String(expiringSoonTotal)}</span>
       </div>
     </div>
   )
@@ -611,11 +598,26 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
           {list.map(model => {
             const isModelEnabled = !disabledModels.includes(model.id)
             const capacity = model.contextWindow
-            // The chooser offers exactly the windows the upstream declared
-            // for this model; nothing is invented. The effective window (an
-            // override, or the default) is the selected value.
-            const declared = [...new Set(model.supportedContextWindows ?? (capacity !== undefined ? [capacity] : []))].sort((a, b) => b - a)
+            /*
+             * 滑块只走上游声明过的档位,Qoder 没报过的值一个都不发。
+             *
+             * declared 升序排列 —— 滑动条的下标是「第几档」,顺序即档位高低;
+             * 原先给 select 用的是降序(大的在前),滑块必须反过来,否则
+             * 往右拖反而变小。
+             */
+            const declared = [...new Set(model.supportedContextWindows ?? (capacity !== undefined ? [capacity] : []))].sort((a, b) => a - b)
             const effective = capacity ?? model.defaultContextWindow
+            /*
+             * 当前档位的下标。override 不在声明列表里时(上游改了口径、或
+             * 旧配置留下了裸值),退回最近的一档只用于「把手停在哪」,不会
+             * 因为渲染而回写任何东西 —— 写回只发生在用户真的拖动之后。
+             */
+            const currentIndex = effective === undefined
+              ? 0
+              : declared.indexOf(effective) !== -1
+                ? declared.indexOf(effective)
+                : declared.reduce((best, choice, index) =>
+                    Math.abs(choice - effective) < Math.abs(declared[best]! - effective) ? index : best, 0)
             return (
               <div
                 key={model.id}
@@ -636,20 +638,71 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
                 </label>
                 <span className="qdp-contextPicker">
                   {declared.length > 0 ? (
-                    <select
-                      className="qdp-modelSelect"
-                      value={effective !== undefined && declared.includes(effective) ? String(effective) : ''}
-                      disabled={busy}
-                      aria-label={`${model.name} ${t('contextHeading')}`}
-                      onChange={event => { onSetModelContextWindow(model.id, Number(event.currentTarget.value)) }}
-                    >
-                      {effective !== undefined && !declared.includes(effective)
-                        ? <option value="">{formatTokens(effective)}</option>
-                        : null}
-                      {declared.map(choice => (
-                        <option key={choice} value={choice}>{formatTokens(choice)}</option>
-                      ))}
-                    </select>
+                    /*
+                     * 档位多于一个才给滑块;只有一个档位时没有可拖的余地,
+                     * 印成文字反而诚实。多档时仍然只有声明过的档位可达 ——
+                     * 和原来的 select 是同一条约束,只是换了手势。
+                     */
+                    declared.length === 1 ? (
+                      <span className="qdp-modelMeta">{formatTokens(declared[0]!)}</span>
+                    ) : (
+                      <span className="qdp-windowSlider">
+                        {/*
+                         * 视觉层:轨道 + 已选填充 + 把手。真正的输入是下面那层
+                         * 透明的 range input,拖拽、点击定位、方向键都由它接,
+                         * 所以键盘可达性和原生行为都保持不变。
+                         */}
+                        <span className="qdp-windowTrack" aria-hidden="true">
+                          <span
+                            className="qdp-windowFill"
+                            style={{ width: `${String((currentIndex / (declared.length - 1)) * 100)}%` }}
+                          />
+                          <span
+                            className="qdp-windowKnob"
+                            style={{ left: `${String((currentIndex / (declared.length - 1)) * 100)}%` }}
+                          />
+                          <input
+                            className="qdp-windowInput"
+                            type="range"
+                            min={0}
+                            max={declared.length - 1}
+                            step={1}
+                            value={currentIndex}
+                            disabled={busy}
+                            aria-label={`${model.name} ${t('contextHeading')}`}
+                            aria-valuetext={formatTokens(declared[currentIndex] ?? 0)}
+                            onChange={event => {
+                              // 滑块的取值是档位下标,发出去的永远是那一档的
+                              // 真实 token 数 —— 上游字段的语义没有变。
+                              const choice = declared[Number(event.currentTarget.value)]
+                              if (choice !== undefined) onSetModelContextWindow(model.id, choice)
+                            }}
+                          />
+                        </span>
+                        <span className="qdp-windowTicks" aria-hidden="true">
+                          {/* 只标首尾和中间一档,标满会糊成一片。 */}
+                          {declared.length <= 3
+                            ? declared.map((choice, index) => (
+                                <span
+                                  key={choice}
+                                  className="qdp-windowTick"
+                                  style={{ left: `${String((index / (declared.length - 1)) * 100)}%` }}
+                                >
+                                  {formatTokens(choice)}
+                                </span>
+                              ))
+                            : [0, Math.floor((declared.length - 1) / 2), declared.length - 1].map(index => (
+                                <span
+                                  key={declared[index]}
+                                  className="qdp-windowTick"
+                                  style={{ left: `${String((index / (declared.length - 1)) * 100)}%` }}
+                                >
+                                  {formatTokens(declared[index]!)}
+                                </span>
+                              ))}
+                        </span>
+                      </span>
+                    )
                   ) : capacity !== undefined ? (
                     <span className="qdp-modelMeta">{formatTokens(capacity)}</span>
                   ) : null}

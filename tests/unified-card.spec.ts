@@ -558,9 +558,10 @@ describe('Unified Qoder Plugin Card', () => {
     // Check-in lives on the Usage pane's own line: state text and action
     // buttons are visible without any expansion.
 
-    // The state line states today's claim (+100) without any expansion.
-    const states = view!.root.findAll(n => typeof n.props.children === 'string' && n.props.children.includes('+100 Credits'))
-    expect(states.length).toBeGreaterThanOrEqual(1)
+    // 需求(m02274 第 3 条):「今日：+100 Credits」状态文本已删 —— 它把
+    // 用户手动点的签到也说成「已自动签到」,是错误表述;领过没有由按钮
+    // 自己表达(灰掉 + 「今日已签到」),不再用文字复述。
+    expect(view!.root.findAll(n => n.children.includes('+100 Credits'))).toHaveLength(0)
 
     // 需求(m01317 第 3 条):旧的日志展开/刷新/清空整套按钮已经删掉,改用
     // 与「可用额度」并排的领取台账。
@@ -571,12 +572,12 @@ describe('Unified Qoder Plugin Card', () => {
     // 按钮(以及设置里的「刷新模型列表」)同字,断言必然误伤。
     expect(view!.root.findAll(n => n.children.includes(en.checkInLogShow))).toHaveLength(0)
     expect(view!.root.findAll(n => n.children.includes(en.checkInClear))).toHaveLength(0)
-    // 台账按时间窗过滤:这条 fixture 的 timestamp 是 2023-11-15,早已落在
-    // 7/30 天窗口之外,所以台账正确地把它排除并给出空态文案 —— 旧的日志表
-    // 只证明「按过按钮」,台账回答的是「现在还握着哪些包、什么时候到期」,
-    // 过期的包本来就不该留在窗内。
-    expect(view!.root.findAll(n => n.children.includes(en.ledgerEmpty)).length).toBeGreaterThanOrEqual(1)
-    expect(view!.root.findAll(n => n.children.includes('+100'))).toHaveLength(0)
+    // 需求(m02274 第 1 条):7/30 天窗口切换已删,台账不再按时间窗过滤,
+    // 界面能显示几条就显示几条。这条 fixture 的 timestamp 是 2023-11-15,
+    // 旧版会把它过滤掉并给出空态;现在这笔领取直接列出,「+100」就在行上。
+    expect(view!.root.findAll(n => n.children.includes(en.ledgerEmpty))).toHaveLength(0)
+    const ledgerRows = view!.root.findAll(n => n.children.includes('+100'))
+    expect(ledgerRows.length).toBeGreaterThanOrEqual(1)
 
     // The day is already claimed in this fixture, so the claim button reads
     // 「今日已签到」 and is DISABLED — the action is not re-offered.

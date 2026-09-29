@@ -290,15 +290,17 @@ describe('Qoder plugin card', () => {
     }
     await mount()
     await openPane(en.paneModels)
-    const select = view!.root.findAllByType('select')[0]
-    expect(select).toBeDefined()
-    expect(select!.props.value).toBe('200000')
-    await act(async () => { select!.props.onChange({ currentTarget: { value: '1000000' } }) })
+    // The slider's value is the INDEX of the declared size, so the first of
+    // [200K, 1M] is 0 — but what it posts is the size itself.
+    const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
+    expect(slider).toBeDefined()
+    expect(slider!.props.value).toBe(0)
+    await act(async () => { slider!.props.onChange({ currentTarget: { value: '1' } }) })
     expect(posts).toHaveLength(1)
     expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-model-context-window', model: 'm1', window: 1_000_000 })
   })
 
-  it('states each declared window as its own chooser option', async () => {
+  it('offers only the windows the upstream declared, as slider stops', async () => {
     statusBody = {
       status: 'signed-in',
       probeKey: 'test-probe-key',
@@ -307,11 +309,16 @@ describe('Qoder plugin card', () => {
     }
     await mount()
     await openPane(en.paneModels)
-    const select = view!.root.findAllByType('select')[0]
-    expect(select).toBeDefined()
-    const options = (select!.children as unknown as { props: { value?: string; children?: string } }[])
-      .map(node => `${node.props.value ?? ''}:${node.props.children ?? ''}`)
-    expect(options).toEqual(['1000000:1M', '200000:200K'])
+    const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
+    expect(slider).toBeDefined()
+    // Exactly one stop per declared size: 0 .. length-1. No intermediate token
+    // counts are reachable, which is the guarantee the old <select> gave.
+    expect(slider!.props.min).toBe(0)
+    expect(slider!.props.max).toBe(1)
+    // The tick labels name the sizes, ascending.
+    const tree = JSON.stringify(view!.toJSON())
+    expect(tree).toContain('200K')
+    expect(tree).toContain('1M')
   })
 
   // ---- tabbed body -----------------------------------------------------------
@@ -340,11 +347,15 @@ describe('Qoder plugin card', () => {
     expect(tree).toContain(t('exactRemaining', { remain: '75', size: '100' }))
     expect(tree).not.toContain('组织资源包')
     expect(tree).toContain(en.unlimitedQuota)
-    // The Models pane carries the per-model chooser beside the toggles.
+    // The Models pane carries the per-model window slider beside the toggles.
     await openPane(en.paneModels)
     tree = JSON.stringify(view!.toJSON())
-    expect(tree).toContain('200K')
-    expect(view!.root.findAllByType('select')).toHaveLength(1)
+    // The fixture's effective window (200K) is not one of the declared stops
+    // ([128K, 1M]), so the handle parks on the nearest declared one. Its label
+    // is the stop the slider can actually reach, not the out-of-list value.
+    expect(tree).toContain('128K')
+    expect(tree).toContain('1M')
+    expect(view!.root.findAllByType('input').filter(node => node.props.type === 'range')).toHaveLength(1)
   })
 
   it('offers the per-model window chooser on the Global card, a route write', async () => {
@@ -356,9 +367,9 @@ describe('Qoder plugin card', () => {
     }
     await mount(QODER_GLOBAL_CARD)
     await openPane(en.paneModels)
-    const select = view!.root.findAllByType('select')[0]
-    expect(select).toBeDefined()
-    await act(async () => { select!.props.onChange({ currentTarget: { value: '1000000' } }) })
+    const slider = view!.root.findAllByType('input').filter(node => node.props.type === 'range')[0]
+    expect(slider).toBeDefined()
+    await act(async () => { slider!.props.onChange({ currentTarget: { value: '1' } }) })
     expect(posts).toHaveLength(1)
     expect(posts[0]!.url).toBe(QODER_GLOBAL_CARD.probePath)
     expect(JSON.parse(String(posts[0]!.init.body))).toEqual({ action: 'set-model-context-window', model: 'm1', window: 1_000_000 })
