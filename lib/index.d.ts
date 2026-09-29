@@ -276,6 +276,8 @@ type QoderWebStatus = {
     status: 'claimed' | 'already-claimed' | 'no-campaign' | 'error';
     amount?: number | undefined;
     message?: string | undefined;
+    /** When today's claimed grant lapses, epoch ms; absent when unreported. */
+    expiresAtMs?: number | undefined;
     /**
      * When the scheduler's timer is next due, epoch ms.
      *
@@ -292,6 +294,8 @@ type QoderWebStatus = {
       amount?: number | undefined;
       campaignKey?: string | undefined;
       message?: string | undefined;
+      /** This claim's own expiry, epoch ms; absent when unreported. */
+      expiresAtMs?: number | undefined;
     }[] | undefined;
   };
   /**
@@ -755,6 +759,17 @@ interface QoderCheckInResult {
   amount?: number | undefined;
   campaignKey?: string | undefined;
   message?: string | undefined;
+  /**
+   * When the claimed credits expire, epoch milliseconds.
+   *
+   * A claimed package is not permanent — Qoder grants it for a fixed window
+   * (30 days for the daily 100-credit benefit) — and the card has to say so.
+   * Resolution order: the claim's own `expiresAt`; failing that, the
+   * campaign's stated `validity.days` counted from the claim moment. Absent
+   * when the upstream said neither, and an absent value is rendered as
+   * unknown rather than guessed.
+   */
+  expiresAtMs?: number | undefined;
 }
 //#endregion
 //#region src/qoder/transport/index.d.ts
