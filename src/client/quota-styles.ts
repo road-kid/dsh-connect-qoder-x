@@ -178,10 +178,10 @@ export const QUOTA_CSS = `
 /* The disclosure header, shaped like workbuddy's .dsm-plugin-card-header:
    one full-width button so the whole row toggles, with the icon and the
    two-line title block on the left and the caret pushed right. */
-.qdp-cardHeader{align-items:center;gap:12px;width:100%;padding:14px 16px;border:0;background:none;color:inherit;cursor:pointer;text-align:left;display:flex}
-.qdp-cardHead{flex-direction:column;gap:4px;flex:1;min-width:0;display:flex}
-.qdp-cardTitle{font-size:15px;line-height:1.4;font-weight:600;color:var(--dsw-alias-label-primary)}
-.qdp-cardDescription{font-size:13px;line-height:1.45;color:var(--dsw-alias-label-tertiary)}
+.qdp-cardHeader{align-items:flex-start;gap:12px;width:100%;padding:14px 16px;border:0;background:none;color:inherit;cursor:pointer;text-align:left;display:flex}
+.qdp-cardHead{flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0;display:flex}
+.qdp-cardTitle{font-size:15px;line-height:1.4;font-weight:600;color:var(--dsw-alias-label-primary);text-align:left}
+.qdp-cardDescription{font-size:13px;line-height:1.45;color:var(--dsw-alias-label-tertiary);text-align:left}
 .qdp-cardIcon{flex:none;width:32px;height:32px;border-radius:7px;display:block}
 /* A border-drawn caret rather than a host icon: the icon primitive's names
    differ across DSH lines (0.1.5 Outline14 vs 0.1.7 OutlineRegular), so no
@@ -275,14 +275,19 @@ export const QUOTA_CSS = `
 .qdp-settingsFlat{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px;gap:4px;display:flex;flex-direction:column}
 .qdp-settingsTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
 /* 可用额度与最近领取并列两栏:workbuddy 的 credit-panels 布局,窄屏回落单列。 */
-.qdp-twoUp{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:10px;align-items:start;display:grid}
+.qdp-twoUp{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:stretch;display:grid}
 @media (max-width:760px){.qdp-twoUp{grid-template-columns:1fr}}
-/* 领取台账的一行:时间 · 数量 · 有效期。 */
+/* 领取台账的一行:左边日期,右边到期情况(与需求 4 的排版一致)。 */
 .qdp-ledgerRow{align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);display:flex}
 .qdp-ledgerDate{color:var(--dsw-alias-label-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}
 .qdp-ledgerAmount{flex:none;color:var(--dsw-alias-label-primary);font-weight:600;font-variant-numeric:tabular-nums}
 .qdp-ledgerExpiry{margin-left:auto;color:var(--dsw-alias-label-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}
 .qdp-ledgerExpired{color:var(--dsw-alias-state-error-primary)}
+/* 右侧额度框里的领取按钮:占满整行、贴在剩余额度/进度下面(需求 4)。 */
+.qdp-claimBtn{width:100%;justify-content:center}
+/* 左框底部的到期小结行,与它上面的台账行用一条分隔线断开。 */
+.qdp-ledgerFoot{border-top:1px solid var(--dsw-alias-border-l2);padding-top:10px;align-items:baseline;justify-content:space-between;gap:10px;display:flex}
+.qdp-ledgerFootValue{color:var(--dsw-alias-label-primary);font-weight:600;font-variant-numeric:tabular-nums}
 
 @media (prefers-reduced-motion:reduce){.qdp-footFill,.qdp-barFill{transition:none}}
 `

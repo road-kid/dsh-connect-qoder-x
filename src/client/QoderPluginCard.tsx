@@ -363,64 +363,69 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
     <div className="qdp-panel">
       {creditsError === undefined ? null : <p className="qdp-error">{t('creditsError', { message: creditsError })}</p>}
       {/*
-       * 两栏并列:左「可用额度」,右「最近领取」。workbuddy 的 credit-panels
-       * 布局 —— 把「我还有什么」和「这些是怎么来的、什么时候过期」放在同一
-       * 屏,不必来回切 tab。窄屏由 .qdp-twoUp 的断点回落到单列。
+       * 两个框并列(需求 4,按 workbuddy 的 credit-panels 排版):
+       *   左框 = 领取记录,每行左边日期、右边到期情况,底部一条到期小结;
+       *   右框 = 剩余额度,领取按钮紧贴在额度/进度下面,同框。
+       * 窄屏由 .qdp-twoUp 的断点回落到单列。
        */}
       <div className="qdp-twoUp">
-      <div className="qdp-panel">
-      {credits === undefined ? null : (
-        <>
+        <CheckInLedger logs={checkIn?.logs} t={t} />
+        <div className="qdp-panel">
           <div className="qdp-panelHead">
             <h3 className="qdp-panelTitle">{t('creditsHeading')}</h3>
-            <span className="qdp-panelMeta">
-              {/*
-               * 「合计：不限额」 is a CLAIM: it must only appear when the
-               * upstream actually said so. An absent/NaN usage percentage is
-               * not "unlimited" — it is a reading we never got, and saying
-               * otherwise would invent a fact.
-               */}
-              {credits.unlimited === true
-                ? t('creditsTotalUnlimited')
-                : Number.isFinite(credits.total)
-                  ? t('creditsUsed', { percent: formatPercent(credits.total) })
-                  : t('creditsNoData')}
-            </span>
           </div>
-          {credits.cycleResetTime === undefined ? null : (
-            <p className="qdp-panelMeta">{t('cycleResetAt', { time: formatCycleReset(credits.cycleResetTime) })}</p>
+          {credits === undefined ? null : (
+            <>
+              {credits.cycleResetTime === undefined ? null : (
+                <p className="qdp-panelMeta">{t('cycleResetAt', { time: formatCycleReset(credits.cycleResetTime) })}</p>
+              )}
+              {/*
+               * 「合计：不限额」 was wrong on two counts: the wording reads as a
+               * CAUSE (the account is unlimited) when the upstream field says
+               * only that this cycle's usage was not capped, and rendering it
+               * in the heading slot put a usage reading where the box's own
+               * title belongs. A reading that is not a number is stated as
+               * 无上限 usage, and only when the upstream actually said so —
+               * an absent/NaN percentage is a reading we never got, and
+               * calling that "unlimited" invents a fact.
+               */}
+              <p className="qdp-panelMeta">
+                {Number.isFinite(credits.total)
+                  ? t('creditsUsed', { percent: formatPercent(credits.total) })
+                  : credits.unlimited === true
+                    ? t('creditsUsedUnlimited')
+                    : t('creditsNoData')}
+              </p>
+              {credits.accounts
+                .filter((account: QoderWebCreditAccount) => account.remain > 0 || account.unlimited === true)
+                .map((account, index) => (
+                  <CreditBar
+                    key={`${account.packageName}-${String(index)}`}
+                    label={account.packageName}
+                    remain={account.remain}
+                    size={account.size}
+                    unlimited={account.unlimited}
+                    packageEndTime={account.packageEndTime}
+                    t={t}
+                  />
+                ))}
+            </>
           )}
-          {credits.accounts
-            .filter((account: QoderWebCreditAccount) => account.remain > 0 || account.unlimited === true)
-            .map((account, index) => (
-              <CreditBar
-                key={`${account.packageName}-${String(index)}`}
-                label={account.packageName}
-                remain={account.remain}
-                size={account.size}
-                unlimited={account.unlimited}
-                packageEndTime={account.packageEndTime}
-                t={t}
-              />
-            ))}
-        </>
-      )}
-      </div>
-      <CheckInLedger logs={checkIn?.logs} t={t} />
-      </div>
-      {/*
-       * 签到区:状态行 + 动作按钮一行放下。原折叠头版本把「今日是否已签」
-       * 藏在了展开后的表格里;它现在直接印在状态行,而领取明细在右侧台账。
-       */}
-      <div className="qdp-panelDivide qdp-checkinLine">
-        <div className="qdp-checkinState">
-          <span className="qdp-panelTitle">{t('tabCheckIn')}</span>
-          {lastStateText === undefined ? null : <span className="qdp-panelMeta">{t('checkInLastToday', { state: lastStateText })}</span>}
-          {autoCheckIn === true && checkIn?.nextRunAt !== undefined ? (
-            <span className="qdp-panelMeta">{t('checkInNextRun', { time: formatTime(checkIn.nextRunAt) })}</span>
-          ) : null}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/*
+           * 签到区:状态行在按钮上方,按钮占满整行贴在额度下面(需求 4)。
+           * 原折叠头版本把「今日是否已签」藏在展开后的表格里;它现在印在
+           * 按钮上方,而领取明细在左侧台账。
+           */}
+          {lastStateText === undefined && !(autoCheckIn === true && checkIn?.nextRunAt !== undefined) ? null : (
+            <p className="qdp-panelMeta">
+              {[
+                lastStateText === undefined ? null : t('checkInLastToday', { state: lastStateText }),
+                autoCheckIn === true && checkIn?.nextRunAt !== undefined
+                  ? t('checkInNextRun', { time: formatTime(checkIn.nextRunAt) })
+                  : null,
+              ].filter(Boolean).join(' · ')}
+            </p>
+          )}
           {/*
            * 「立即领取」 is an ACTION: once today's claim is in, re-offering it
            * invites a request the upstream will only refuse. The claimed state
@@ -428,15 +433,15 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
            */}
           <button
             type="button"
-            className={claimedToday ? 'qdp-btn' : 'qdp-btn qdp-btnPrimary'}
+            className={claimedToday ? 'qdp-btn qdp-claimBtn' : 'qdp-btn qdp-btnPrimary qdp-claimBtn'}
             disabled={busy || checkingIn || claimedToday}
             onClick={onCheckIn}
           >
             {checkingIn ? t('checkInChecking') : claimedToday ? t('checkInClaimedToday') : t('checkInNow')}
           </button>
+          {checkInNotice === undefined ? null : <p className="qdp-body">{checkInNotice}</p>}
         </div>
       </div>
-      {checkInNotice === undefined ? null : <p className="qdp-body">{checkInNotice}</p>}
     </div>
   )
 }
@@ -470,6 +475,13 @@ function CheckInLedger({ logs, t }: {
     .filter(entry => entry.timestamp >= cutoff)
     .sort((a, b) => b.timestamp - a.timestamp)
   const total = claimed.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
+  /*
+   * 「还握着多少还没到期的」是台账真正要回答的问题,所以底部小结按到期日
+   * 统计,而不是按领取日。已过期的笔不计入 —— 它们已经作废,算进去只会
+   * 把可用额度说大。
+   */
+  const live = claimed.filter(entry => entry.expiresAtMs !== undefined && entry.expiresAtMs > now)
+  const liveTotal = live.reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
   return (
     <div className="qdp-panel">
       <div className="qdp-panelHead">
@@ -488,10 +500,9 @@ function CheckInLedger({ logs, t }: {
           ))}
         </span>
       </div>
-      <p className="qdp-panelMeta">
-        {claimed.length === 0 ? t('ledgerEmpty') : t('ledgerSummary', { count: claimed.length, amount: total })}
-      </p>
-      {claimed.length === 0 ? null : (
+      {claimed.length === 0 ? (
+        <p className="qdp-panelMeta">{t('ledgerEmpty')}</p>
+      ) : (
         <div className="qdp-logList">
           {claimed.map(entry => {
             const expired = entry.expiresAtMs !== undefined && entry.expiresAtMs <= now
@@ -511,6 +522,11 @@ function CheckInLedger({ logs, t }: {
           })}
         </div>
       )}
+      {/* 底部到期小结:与上面的记录行用一条分隔线断开(需求 4 的排版)。 */}
+      <div className="qdp-ledgerFoot">
+        <span className="qdp-panelMeta">{t('ledgerExpiringHeading', { days: String(days) })}</span>
+        <span className="qdp-ledgerFootValue">{live.length === 0 ? '0' : String(liveTotal)}</span>
+      </div>
     </div>
   )
 }
@@ -546,11 +562,25 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
     const index = MODEL_TIER.indexOf(id)
     return index === -1 ? MODEL_TIER.length : index
   }
+  /*
+   * The sort key is the model's DEFAULT window, never the effective one.
+   *
+   * `contextWindow` carries whatever override the user just picked (catalog.ts
+   * all(): an override replaces contextWindow outright), so sorting by it moved
+   * a row the moment its own chooser changed — the list "乱动" under the cursor
+   * the user was aiming at. `defaultContextWindow` is the upstream's own value
+   * and is untouched by the override, so the order holds still while windows
+   * are edited. Within a tier the wider default leads.
+   */
+  const capabilityOf = (model: QoderCatalogModelSnapshot): number =>
+    model.defaultContextWindow ?? model.contextWindow ?? 0
   const list = [...(models ?? [])].sort((a, b) => {
     const byTier = tierOf(a.id) - tierOf(b.id)
-    // Within a tier (and for unknown ids), the larger window is the more
-    // capable entry, so it leads.
-    return byTier !== 0 ? byTier : (b.contextWindow ?? 0) - (a.contextWindow ?? 0)
+    if (byTier !== 0) return byTier
+    const byCapability = capabilityOf(b) - capabilityOf(a)
+    // Last resort: the id, so two models with the same tier and window keep a
+    // fixed order across renders instead of swapping by array position.
+    return byCapability !== 0 ? byCapability : a.id.localeCompare(b.id)
   })
   return (
     <div className="qdp-list">
