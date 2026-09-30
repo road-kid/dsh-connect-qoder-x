@@ -21,7 +21,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import type { QoderRegion } from '../region.ts'
@@ -194,14 +194,4 @@ export async function resolveRiskIdentity(
     child.stdin?.on('error', () => undefined)
     child.stdin?.end(`${JSON.stringify({ account })}\n`)
   })
-}
-
-/** Read a client's reported version, used for the `Cosy-Version` header. */
-export function readClientVersion(resourcesDir: string): string | undefined {
-  try {
-    const manifest = JSON.parse(readFileSync(join(resourcesDir, 'build-manifest.json'), 'utf8')) as { productVersion?: unknown }
-    return typeof manifest.productVersion === 'string' ? manifest.productVersion : undefined
-  } catch {
-    return undefined
-  }
 }

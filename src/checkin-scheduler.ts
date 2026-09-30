@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { QoderCheckInResult } from './qoder/transport/checkin.ts'
 import { qoderPluginDataDir } from './paths.ts'
-import { getClaimWindowDateString } from './claim-window.ts'
+import { DEFAULT_CLAIM_WINDOW_MINUTE, getClaimWindowDateString } from './claim-window.ts'
 
 export interface VariantCheckInTarget {
   variantId: string
@@ -150,19 +150,6 @@ export class JsonFileCheckInStore implements CheckInStatusStore {
 }
 
 /**
- * Returns the current date in YYYY-MM-DD standardized on UTC+8 (Beijing Time).
- */
-export function getUtc8DateString(nowMs: number = Date.now()): string {
-  const d = new Date(nowMs)
-  // Shift by timezone offset to UTC, then +8 hours (480 mins)
-  const utc8 = new Date(d.getTime() + (d.getTimezoneOffset() + 480) * 60_000)
-  const y = utc8.getFullYear()
-  const m = String(utc8.getMonth() + 1).padStart(2, '0')
-  const day = String(utc8.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-/**
  * Which daily CLAIM WINDOW an instant belongs to, as `YYYY-MM-DD` in UTC+8.
  *
  * Re-exported from the shared module so callers that already depend on the
@@ -177,8 +164,12 @@ export { getClaimWindowDateString } from './claim-window.ts'
  * 600 is 10:00, which is when the upstream resets the daily campaign; it is
  * also the default a variant falls back to when its setting is absent or
  * malformed, so a bad stored value can never leave the day unscheduled.
+ *
+ * Aliased to the claim-window constant rather than restated: this moment IS
+ * the window opening, and two literals would let the timer and the window
+ * comparison drift apart the day someone edits one of them.
  */
-export const DEFAULT_CHECK_IN_MINUTE = 600
+export const DEFAULT_CHECK_IN_MINUTE = DEFAULT_CLAIM_WINDOW_MINUTE
 
 /** Clamp any stored/typed value onto a real minute of the day. */
 export function normalizeCheckInMinute(value: unknown): number {
@@ -332,7 +323,6 @@ export class CheckInScheduler {
   async sweepAll(isCatchUp: boolean, only?: string): Promise<void> {
     if (this.disposed) return
     const nowMs = this.now()
-    const today = getUtc8DateString(nowMs)
 
     for (const target of this.targets) {
       if (only !== undefined && target.variantId !== only) continue
@@ -344,7 +334,7 @@ export class CheckInScheduler {
       if (this.inFlight.has(target.variantId)) continue
       this.inFlight.add(target.variantId)
       try {
-        await this.sweepOne(target, isCatchUp, nowMs, today)
+        await this.sweepOne(target, isCatchUp, nowMs)
       } finally {
         this.inFlight.delete(target.variantId)
       }
@@ -355,7 +345,6 @@ export class CheckInScheduler {
     target: VariantCheckInTarget,
     isCatchUp: boolean,
     nowMs: number,
-    today: string,
   ): Promise<void> {
     const record = this.store.read(target.variantId)
     /*

@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { findRuntimeInfoBinary, readClientVersion, resolveRiskIdentity } from '../src/qoder/transport/risk-identity.ts'
+import { findRuntimeInfoBinary, resolveRiskIdentity } from '../src/qoder/transport/risk-identity.ts'
 
 /**
  * A stand-in for the client's `runtime-info` helper.
@@ -136,19 +136,6 @@ describe('findRuntimeInfoBinary', () => {
     try {
       expect(findRuntimeInfoBinary({ installRoots: [root], platform: 'win32' }))
         .toBe(join(root, 'resources', 'umid', 'runtime-info.exe'))
-      expect(readClientVersion(join(root, 'resources'))).toBe('0.4.3')
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('readClientVersion', () => {
-  it('reads the client version, and tolerates a missing manifest', async () => {
-    const root = fakeInstall(true)
-    try {
-      expect(readClientVersion(join(root, 'resources'))).toBe('0.4.3')
-      expect(readClientVersion(join(root, 'nope'))).toBeUndefined()
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
