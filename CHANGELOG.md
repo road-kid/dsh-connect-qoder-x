@@ -1,0 +1,120 @@
+# Changelog
+
+All notable changes to this project are documented here. Entries describe
+user-visible behaviour; commit messages carry the mechanism.
+
+## 0.3.0
+
+### Fixed — international (`qoder-global`) daily check-in never offered a claim
+
+The international service only serves the daily 100-Credit campaign to requests that
+carry a device risk identity minted by the Qoder **desktop client** on this machine.
+The plugin sent a self-generated random UUID in its place (and no `Cosy-MachineCode`
+at all), so the service answered HTTP 200 with a campaign list that never contained
+the daily benefit — which surfaced as "no campaign today" and an unusable *Claim now*
+button. The plugin now drives the installed client's signed `runtime-info` component
+to obtain the real identity and sends it on both the campaign and the claim request.
+
+- Requires the Qoder desktop client installed locally. When it is missing, the card
+  says so plainly (`每日签到需要本机安装 Qoder 桌面客户端` / "needs the Qoder desktop
+  app") instead of blaming the account. The China variant never required this
+  identity and is unaffected.
+- This was never a regression: the check-in path has no region-specific branch in any
+  version, so the international claim did not work on older builds either.
+
+### Fixed — check-in re-offered a claim after midnight, before 10:00
+
+The claim window runs **10:00 → 10:00 the next day (UTC+8)**, not midnight →
+midnight. Every "is this already claimed?" test compared calendar dates, so a benefit
+claimed at 23:11 looked unclaimed at 00:44: the button went back to *Claim now* and a
+scheduled sweep would have spent a second request the service can only refuse. All
+three sites — the scheduler's settle test, the record's stored label, and the card's
+`today` stamp — now compare the claim window, using each variant's own configured
+window opening so they cannot drift apart.
+
+### Fixed — ledger showed phantom claims with wrong timestamps
+
+"最近领取 / Recent claims" recorded a `+100` row for **every** write, including repeat
+clicks and scheduled runs that only learned the day was already claimed. Those rows
+carry the observation clock rather than a grant instant, so the ledger filled with
+entries the account never received, all stamped with the same back-computed expiry.
+Now only a genuine grant mints a ledger row; an already-claimed day keeps the original
+settlement untouched. A claim already granted by the service also keeps the button
+disabled, so the repeat click that produced the noise is no longer invited.
+
+### Fixed — a rejected PAT and an unreachable service reported the same error
+
+`validateApiKey` answered a bare boolean, so "Qoder refused this token" and "we never
+got an answer" were indistinguishable, and the card rendered both as *That PAT was
+rejected* — sending users to regenerate a credential that had never been judged
+whenever the endpoint was slow, offline, or returning 5xx. The two are now separate
+outcomes with their own messages, in the card, the settings route and
+`dsh-connect-qoder-x pat set`.
+
+### Fixed — model-list refresh failures were silent
+
+The route answers a failed refresh with **HTTP 200** and puts the reason in the
+response body. The card checked only `response.ok`, so every failure looked like a
+success: no message, and the stale model list stayed on screen. The card now reads the
+body and shows the reason, and does not repaint over it.
+
+### Changed — price factor `x0` now reads `x0.0`
+
+Whole-number multipliers are padded to one decimal (`x0.0`, `x1.0`, `x2.0`) so a free
+model reads as a rate beside its fractional neighbours, and the column keeps a steady
+width. Fractional factors keep Qoder's own value (`x0.79` stays `x0.79`) — they are
+real quoted rates, not rounded ones. Catalog rows stored before this change pick up
+the new spelling on the next model-list refresh.
+
+### Changed — DSH 0.2.x compatibility
+
+The peer and engine ranges capped at `<0.2.0`, which would have had DSH disable this
+plugin's row the moment 0.2.0 shipped final (the running `0.2.0-rc.1` already passed,
+because prereleases participate in range matching). The ranges are widened to
+`>=0.1.7-rc.1 <0.3.0`. Verified, not assumed: diffing the DSH tags `dsh-v0.1.7-rc.2`
+→ `dsh-v0.2.0-rc.1` shows **zero changed source files** across every package this
+plugin imports, and the 0.1.7 plugin-configuration seats it registers on are the same
+seats 0.2.x reads. The code needed no change. `^0.2.0` was deliberately not used: it
+rejects the current `0.2.0-rc.1` and would drop 0.1.7 support.
+
+### Fixed — lockfile could not be installed from a clone
+
+`package.json` required the 0.1.7 release candidates while `pnpm-lock.yaml` still
+pinned `^0.1.5-rc.1`, so a frozen install — CI's default — failed with
+`ERR_PNPM_OUTDATED_LOCKFILE` on 16 mismatched dependencies. Regenerated; the frozen
+check passes from a clean directory.
+
+### Added — check-in panel shows what is actually held
+
+The old free-form log table is replaced by a *Recent claims* panel that answers the
+question users actually ask — which credit packages do I hold and when does each
+expire — listing each grant with its own expiry, plus an expiring-within-3-days
+summary. Qoder's own expiry travels from the claim to the card; a grant the service
+did not date falls back to the documented 30-day convention rather than a guessed
+date. `清空日志 / Clear logs` stays within reach.
+
+### Improved — card content and the DSH 0.1.7 tool-role port
+
+- The card now names the coding plan the credits belong to, and never renders a
+  placeholder subscriber name.
+- Tool results are ported to DSH 0.1.7's first-class `tool` role
+  (`toolCallId` / `isError`) instead of being smuggled inside a `user` message, which
+  0.1.7 and 0.2.x no longer read.
+- Model list, context-window slider and usage panels were reshaped; dead settings
+  surfaces, the redundant card shell and orphaned styles were removed.
+- The plugin page now shows the package name `dsh-connect-qoder-x` with a description
+  covering PAT-based access, dual-region support, model toggles, context windows,
+  quota and check-in; the card's own one-liner was rewritten to match.
+
+### Notes for testers
+
+- Install/update requires `pnpm install` (the lockfile changed); rebuild with
+  `pnpm run build` — `lib/` is committed, so source changes are invisible until built.
+- After updating, refresh the model list once to re-store catalog rows with the new
+  price-factor spelling.
+- Full suite: **462–463 passed / 6–7 failed** of 469, every run. The failures are
+  long-standing baseline cases (`adapter` 1, `catalog-lifecycle` 1, `reasoning-merge`
+  4–5 flaky 5-second timeouts). `test:qoder` (the node --test transport suite) is
+  131/131 green.
+- International check-in can only be verified on a machine with the Qoder desktop
+  client installed.

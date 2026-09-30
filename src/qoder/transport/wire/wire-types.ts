@@ -1,7 +1,7 @@
 /**
  * Qoder protocol wire types and definitions.
  *
- * @module dsh-provider-qoder/qoder/transport/wire/wire-types
+ * @module dsh-connect-qoder-x/qoder/transport/wire/wire-types
  */
 
 export interface QoderWireToolCall {

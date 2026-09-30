@@ -1,18 +1,21 @@
 dsh-connect-qoder-x — NOTICE
 ============================
 
-Attributions for the upstream sources this project is derived from.
-本仓库代码的上游出处：
+Acknowledgements / 致谢
+-----------------------
 
-1. This project is a fork of masknull/dsh-qoder-connect (MIT) —
-   the project it was renamed and ported from.
+This project's implementation was informed by the following open-source
+projects. Thanks to their authors. / 本项目的实现参考了以下开源项目，在此致谢：
+
+1. dsh-qoder-connect (MIT) — plugin skeleton and the connect mechanism.
    https://github.com/masknull/dsh-qoder-connect
 
-2. Derived from masknull/dsh-workbuddy-connect (MIT) —
-   the connect-plugin skeleton the upstream project was refactored from.
+2. dsh-workbuddy-connect (MIT) — the shape of the settings card and the
+   sidebar interactions.
    https://github.com/masknull/dsh-workbuddy-connect
 
-3. Qoder transport layer ported from mo-n/dsh-provider-qoder (MIT).
+3. dsh-provider-qoder (MIT) — Qoder transport protocol details.
    https://github.com/mo-n/dsh-provider-qoder
 
-All upstreams are distributed under the MIT License; see LICENSE.
+This project is released under the MIT License; see LICENSE.
+本项目按 MIT 许可发布，详见 LICENSE。

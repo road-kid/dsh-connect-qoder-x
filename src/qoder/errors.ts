@@ -1,7 +1,7 @@
 /**
  * DSH-compatible LLM error representation.
  *
- * @module dsh-provider-qoder/qoder/errors
+ * @module dsh-connect-qoder-x/qoder/errors
  */
 
 import { LlmError, ProviderRequestId, type LlmErrorOptions } from '@deepseek-ai/dsh-llm'
