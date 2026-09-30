@@ -1,5 +1,15 @@
 /** Browser-safe Qoder subscriber account and quota types. */
 
+/**
+ * The name Qoder's own API substitutes when an account has none.
+ *
+ * It is a WIRE placeholder, not an identity: it rides the encrypted cosy
+ * payload (`wire/cosy.ts` sends `name`), so it must keep its exact spelling.
+ * Nothing that faces the user may repeat it — an account with no name must
+ * render as unnamed rather than as a subscriber called "Qoder User".
+ */
+export const QODER_UNKNOWN_SUBSCRIBER_NAME = 'Qoder User'
+
 export interface QoderSubscriberProfile {
   id: string
   name: string

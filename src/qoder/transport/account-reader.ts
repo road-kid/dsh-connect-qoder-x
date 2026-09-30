@@ -7,6 +7,7 @@ import {
   getQoderUserStatusUrl,
   type QoderRegion,
 } from './endpoints.ts'
+import { QODER_UNKNOWN_SUBSCRIBER_NAME } from '../account.ts'
 import type {
   QoderAccountInfo,
   QoderQuota,
@@ -287,7 +288,11 @@ export class QoderUsageReader {
     const creds = await this.authService.getCredentials(pat, signal)
     const profile: QoderSubscriberProfile = {
       id: creds.userID,
-      name: creds.name || 'Qoder User',
+      // Qoder substitutes a placeholder when an account carries no name. It is
+      // a wire value, not an identity: blank it here so every reader treats the
+      // account as unnamed, instead of the card announcing a subscriber called
+      // "Qoder User". `upstream.fetchCredits` maps '' to "no name to show".
+      name: creds.name === QODER_UNKNOWN_SUBSCRIBER_NAME ? '' : creds.name,
       email: creds.email || '',
     }
 
