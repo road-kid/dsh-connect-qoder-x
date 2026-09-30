@@ -42,18 +42,37 @@ Configure only what you use: a variant with no saved PAT shows no model group an
 - **Model visibility toggles & batch controls** — each variant card provides a dedicated *Model Toggles* tab to freely enable or hide individual models; disabled models are hidden from the DSH model picker, keeping it tidy; includes instant search by name/ID and one-click *Enable all* / *Disable all* batch operations.
 - **Daily check-in (automatic + manual)** — 100 Credits are claimable every day. The claim window is **10:00 → 10:00 the next day (UTC+8)**, not a calendar day — the plugin judges "already claimed" strictly by the window: claim at 23:00 and the card still reads *Claimed today* at 00:44, flipping back to *Claim now* only when the next window opens at 10:00. A custom check-in time moves the window boundary with it. Automatic check-in is **off by default** and toggled per variant on the card (its time defaults to 10:00 UTC+8, the moment Qoder resets the campaign); once enabled it also catches up on startup so a missed window is not lost. The *Recent claims* panel lists every credit package you actually hold with its own expiry date — only genuine grants are recorded, and repeat clicks no longer mint phantom rows. **The international variant requires the Qoder desktop app to be installed on this machine**: the international service only serves the daily campaign to requests carrying a client-minted device risk identity, and when none is found the plugin says so plainly instead of falsely reporting "no campaign today". The China variant has no such requirement.
 - **Sidebar quota card + credit details** — the sidebar-display settings toggle a per-variant quota widget (off by default; each toggle needs its variant's PAT saved) with one shared refresh interval (default 5 min, minimum 1 min). Clicking the sidebar widget opens the *Qoder quota* panel: one row per credit package — *“Remaining / Total + bar | Expires”* — plus the cycle share and reset time. Click the same widget again to close; click the other to switch variants.
-- **Rate display `x<priceFactor>`** — each model name is suffixed with the Qoder-reported price multiplier (e.g. `Some Model · x0.79`, free is `x0.0`), spelled `x<n>` from the catalog's `price_factor`. Whole factors are padded to one decimal (`x1.0`) so a zero rate reads as a rate beside its fractional neighbours; fractional factors keep Qoder's own value (`x0.79`, `x1.6`). Display only — it never changes the request; models whose rate Qoder does not report simply show no suffix.
+- **Rate display `x<priceFactor>`** — each model name is suffixed with the Qoder-reported price multiplier (in the model picker: `Some Model · x0.79`, free is `x0.0`), spelled `x<n>` from the catalog's `price_factor`. Whole factors are padded to one decimal (`x1.0`) so a zero rate reads as a rate beside its fractional neighbours; fractional factors keep Qoder's own value (`x0.79`, `x1.6`). Display only — it never changes the request; models whose rate Qoder does not report simply show no suffix. The card's own model list spells the same number as `0.5x`; the value is identical, only the layout direction differs.
+
+---
+
+## A look at the UI
+
+The *Auto check-in* pane keeps everything about the daily grant in one view: the **Recent claims** ledger on the left (each package actually received, with its expiry) and **Available credit** on the right (remaining/total per package, with progress bars) plus the *Claim now* button.
+
+![Usage and check-in pane](assets/checkin-credits.png)
+
+The *Models* pane enables or hides models one by one, batch-enables/disables them, searches by name or ID, and sets each model's context window. A hidden model disappears from the DSH model picker:
+
+![Model visibility and context windows](assets/model-toggles.png)
+
+The sidebar credit widget (off by default, toggled per variant on the card) shows the account's remaining credit and when it was last refreshed:
+
+![Sidebar credit widget](assets/sidebar-quota.png)
 
 ---
 
 ## Where to find the settings UI
 
-DSH 0.1.7 gathers every plugin's configuration into the **Plugins page** (0.2.x keeps the same seats — verified). This plugin's settings have **two entry points**, both rendering the same card:
+DSH 0.1.7 gathers every plugin's configuration into the **Plugins page** (0.2.x keeps the same seats — verified). Once installed, the plugin appears under **Installed** on that page:
 
-1. **Row configuration (primary)** — sidebar *Plugins* → click the **dsh-connect-qoder-x** card to open the package page → find the row `llm-qoder-x` and click its **Configure** control.
-2. **Bundle configuration (secondary)** — sidebar *Plugins* → click the **dsh-connect-qoder-x** card → the settings body renders **inline** under the package description.
+![dsh-connect-qoder-x on the Plugins page](assets/plugin-list.png)
 
-The card no longer draws its own disclosure shell (the page supplies the title, the icon and the breadcrumb). Its internal China/Global switcher and its Status, Context window, Model toggles, Credit details and Check-in tabs are unchanged.
+Click it to open the package page; the settings body renders **inline** under the package description — that is this plugin's settings UI:
+
+![Package page: description and the inline settings card](assets/plugin-page.png)
+
+The card draws no disclosure shell of its own (the page supplies the title, the icon and the breadcrumb). Two panes carry everything: **Auto check-in** (account, available credit, the claims ledger, and the claim action) and **Models** (model visibility and context windows). The row's own *Configure* control opens the very same card.
 
 > **Can't find the settings?** This plugin's card appears on the *Plugins* page only. There is no entry under *Settings* — plugin configuration has lived on the *Plugins* page since DSH 0.1.7.
 
