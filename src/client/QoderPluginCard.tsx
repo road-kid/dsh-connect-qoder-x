@@ -1,6 +1,6 @@
 /** Qoder status card contributed to Harness Plugin configuration. */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
@@ -130,41 +130,6 @@ const POLL_INTERVAL_MS = 60_000
  * values, so a card from this plugin sits in the list beside a built-in one
  * without reading as a different kind of object.
  */
-/** Hover, matching the built-in card's `:hover`. Inline styles cannot express a pseudo-class. */
-/**
- * The page face: the card is no longer collapsible, so it renders in the "open"
- * treatment unconditionally — the tone the built-in card used while expanded.
- */
-
-/**
- * The page body's inner separator. The card is now the whole page, so this rule
- * sits at the top of the body rather than under a disclosure header.
- */
-
-/** The built-in secondary button: transparent, hairline border, 8px radius. */
-
-/**
- * The PAT entry row: the password field takes the row's flexible width, the
- * Save button keeps its own, and the whole block sits inside the card body
- * without a nested box (the same rule the settings rows follow).
- */
-
-/* ---- Collapsible section (settings, check-in log) ---- */
-
-/**
- * Primary action of the inline confirmation and of the PAT save. Fill and text
- * colour come from the theme as a pair: `brand-primary` is a light accent here,
- * so pairing it with a hardcoded white would render white-on-white.
- */
-
-/**
- * The destructive action's tone: solid error fill while confirmed, and a
- * quiet outline before that. Both derive from the error token pair so the
- * theme stays the single source of the colour.
- */
-
-/* ---- Segmented Tab Switcher styles (Figure 1) ---- */
-
 
 function progressFillStyle(percent: number): CSSProperties {
   return {
@@ -298,11 +263,6 @@ function CreditBar({ label, remain, size, unlimited, packageEndTime, t }: {
   )
 }
 
-/** Largest declared window a model accepts, when it declares alternatives. */
-function maxDeclaredWindow(model: QoderCatalogModelSnapshot): number | undefined {
-  const windows = model.supportedContextWindows ?? []
-  return windows.length > 0 ? Math.max(...windows) : undefined
-}
 
 /**
  * Context capacity, listed in full.
@@ -867,38 +827,6 @@ function ModelsPane({ models, disabledModels = [], catalog, t, busy, onSetModelC
  * navigation WITHIN the card, not chrome around it.
  */
 /**
- * Collapsible section shell for the card body: a quiet header row (title +
- * chevron) that folds its children away. Settings-class content uses it so the
- * page opens on the account instead of on controls; the check-in log, which
- * grows unbounded, folds the same way.
- */
-function CardSection({ title, actions, defaultOpen = false, children }: {
-  title: string
-  /** Header-row controls (e.g. 「立即签到」). Clicking them must NOT fold the
-   * section, so they live OUTSIDE the toggle button, to its right. */
-  actions?: React.ReactNode
-  defaultOpen?: boolean
-  children: React.ReactNode
-}): React.ReactNode {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="qdp-section">
-      <div className="qdp-sectionHeadRow">
-        <button
-          type="button"
-          aria-expanded={open}
-          className="qdp-sectionHead"
-          onClick={() => { setOpen(value => !value) }}
-        >
-          <span className={`qdp-chevron${open ? ' qdp-chevronOpen' : ''}`} aria-hidden="true" />
-          <span className="qdp-sectionTitle">{title}</span>
-        </button>
-        {actions === undefined ? null : <span className="qdp-sectionActions">{actions}</span>}
-      </div>
-      {open ? <div className="qdp-sectionBody">{children}</div> : null}
-    </div>
-  )
-}
 
 /**
  * The unified card body: usage first, controls folded.
@@ -1331,15 +1259,6 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
    * only on success, so a mistyped paste can never strand the working
    * credential.
    */
-  const beginReplace = useCallback((): void => {
-    setPatDraft('')
-    setPatError(undefined)
-    setPatNotice(undefined)
-    setReplacing(true)
-    // The input mounts in this commit; focus it right after it exists.
-    requestAnimationFrame(() => { patInput.current?.focus() })
-  }, [])
-
   const patEntry = (): React.ReactNode => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <p className="qdp-body">{t(currentVariant.patGuideKey)}</p>
@@ -1409,15 +1328,6 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
   const signedInLabel = status?.status === 'signed-in' && status.pat?.accountName !== undefined
     ? t('accountSignedInAs', { name: status.pat.accountName })
     : label
-
-  const patSummaryLine = (pat: NonNullable<Extract<QoderWebStatus, { status: 'signed-in' }>['pat']>): React.ReactNode => {
-    const parts = [
-      patSourceText(pat.source, t),
-      pat.savedAtMs === undefined ? null : t('patSavedAt', { time: formatTime(pat.savedAtMs) }),
-      pat.patTail === undefined ? null : t('patTail', { tail: `****${pat.patTail}` }),
-    ].filter(part => part !== null)
-    return <p className="qdp-body">{parts.join(' · ')}</p>
-  }
 
   /* The coding plan the credits belong to. The upstream has always answered
      `/api/v2/user/plan` on every account read; nothing consumed it, so a paid

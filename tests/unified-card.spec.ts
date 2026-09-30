@@ -79,32 +79,6 @@ describe('Unified Qoder Plugin Card', () => {
     vi.unstubAllGlobals()
   })
 
-  /**
-   * Expand the CardSection whose header names `title`, so its body renders.
-   * The header renders title text through nested spans; walk the test
-   * instance's children (instances, not elements) for the string.
-   */
-  async function expandSection(title: string): Promise<void> {
-    const head = view!.root.findAllByType('button').find(node => {
-      if (node.props['aria-expanded'] === undefined) return false
-      const stack: unknown[] = [...node.children]
-      while (stack.length > 0) {
-        const value = stack.shift()
-        if (typeof value === 'string' && value.includes(title)) return true
-        if (Array.isArray(value)) { stack.push(...value); continue }
-        // A ReactTestInstance: descend into its children (it is not an
-        // element — element props would drag fiber handles in and stringify
-        // circularly).
-        if (value !== null && typeof value === 'object' && Array.isArray((value as { children?: unknown[] }).children)) {
-          stack.push(...(value as { children: unknown[] }).children)
-        }
-      }
-      return false
-    })
-    if (head === undefined) throw new Error(`no collapsible section "${title}"`)
-    await act(async () => { head.props.onClick() })
-  }
-
   async function mountUnified(): Promise<void> {
     const fakeScope = {
       getSnapshot: () => ({

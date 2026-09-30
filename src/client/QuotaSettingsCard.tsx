@@ -18,7 +18,6 @@
 
 import { useSyncExternalStore, useState, useEffect, useCallback } from 'react'
 import type { CSSProperties } from 'react'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type { QoderSettingsKey } from './locales.ts'
 import { isQoderWebStatus } from './status-document.ts'
@@ -96,10 +95,6 @@ export interface QuotaSection {
   checkInMinuteGlobal?: number
   quotaPollMs?: number
 }
-
-export type QuotaSettingsCardProps =
-  PropsRuntime<'settings.plugin.item'>
-  & Partial<QuotaSettingsCardInjected>
 
 /** The settings fields this card edits, in display order. */
 const FIELDS = [
@@ -533,128 +528,6 @@ export function QuotaSettingsContent({ t = key => key, scope, signedIn, variant 
   )
 }
 
-/** The standalone shared quota-settings card. */
-export function QuotaSettingsCard(props: QuotaSettingsCardProps): React.ReactNode {
-  const { t = key => key, scope, signedIn } = props
-  const subscribe = useCallback((onStoreChange: () => void) => {
-    return scope?.subscribe(onStoreChange) ?? (() => {})
-  }, [scope])
-  const projection = useSyncExternalStore(
-    subscribe,
-    () => stableProject(scope),
-  )
-  const [open, setOpen] = useState(false)
-  const [hovered, setHovered] = useState(false)
-  const [headerFocused, setHeaderFocused] = useState(false)
-
-  if (projection.status === 'unavailable') return null
-  return (
-    <li
-      style={{ ...cardStyle, ...(hovered ? cardHoverStyle : {}), ...(open ? cardOpenStyle : {}) }}
-      onMouseEnter={() => { setHovered(true) }}
-      onMouseLeave={() => { setHovered(false) }}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label={`${t(open ? 'collapse' : 'expand')}: ${t('quotaSettingsTitle')}`}
-        onClick={() => setOpen(o => !o)}
-        onFocus={event => {
-          let keyboard = true
-          try {
-            keyboard = event.currentTarget.matches(':focus-visible')
-          } catch {
-            keyboard = true
-          }
-          if (keyboard) setHeaderFocused(true)
-        }}
-        onBlur={() => { setHeaderFocused(false) }}
-        style={{ ...headerButtonStyle, ...(headerFocused ? headerFocusStyle : {}) }}
-      >
-        <span style={headTextStyle}>
-          <span style={titleStyle}>{t('quotaSettingsTitle')}</span>
-          <span style={introStyle}>{t('quotaSettingsIntro')}</span>
-        </span>
-        <span style={{ ...chevronStyle, transform: open ? 'rotate(180deg)' : 'none' }}>
-          <ChevronDownIcon />
-        </span>
-      </button>
-      {open ? (
-        <div style={cardBodyStyle}>
-          <QuotaSettingsContent t={t} scope={scope} signedIn={signedIn} />
-        </div>
-      ) : null}
-    </li>
-  )
-}
-
-/** The disclosure chevron, drawn from the same path data as the variant cards'. */
-function ChevronDownIcon(): React.ReactNode {
-  return (
-    <svg width={14} height={14} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path
-        d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z"
-        fill="currentColor"
-      />
-    </svg>
-  )
-}
-
-/* ---- styles: verbatim copies of QoderPluginCard's card constants ---- */
-
-const cardStyle: CSSProperties = {
-  listStyle: 'none',
-  // Border as longhands, never the shorthand (the variant card's comment
-  // explains why: React's style-diff clear breaks shorthands).
-  borderWidth: '0.5px',
-  borderStyle: 'solid',
-  borderColor: 'var(--dsw-alias-border-l4)',
-  borderRadius: 16,
-  background: 'var(--dsw-alias-bg-layer-3)',
-  transition: 'border-color .16s, background .16s',
-}
-/** Hover, matching the built-in card's `:hover` (inline styles cannot express pseudo-classes). */
-const cardHoverStyle: CSSProperties = { borderColor: 'var(--dsw-alias-label-dimmed)' }
-/** Expanded, matching the built-in card's open state. */
-const cardOpenStyle: CSSProperties = {
-  background: 'var(--dsw-alias-bg-layer-2)',
-  borderColor: 'var(--dsw-alias-label-dimmed)',
-}
-const headerButtonStyle: CSSProperties = {
-  boxSizing: 'border-box',
-  width: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  border: 0,
-  borderRadius: 12,
-  padding: '14px 16px',
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-  // The built-in header declares this too; without it a native button can
-  // paint its own chrome on top of the transparent background.
-  appearance: 'none',
-}
-const headerFocusStyle: CSSProperties = { outline: '2px solid var(--dsw-alias-brand-primary)', outlineOffset: -2 }
-const headTextStyle: CSSProperties = { display: 'flex', flex: 1, minWidth: 0, flexDirection: 'column', gap: 4 }
-const titleStyle: CSSProperties = { fontSize: 15, lineHeight: 1.4, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' }
-const introStyle: CSSProperties = { fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-tertiary)' }
-/** The variant cards' chevron rule. */
-const chevronStyle: CSSProperties = {
-  flex: 'none',
-  display: 'flex',
-  color: 'var(--dsw-alias-label-tertiary)',
-  transition: 'transform .16s',
-}
-/** The variant cards' body: hairline top border, inset margins, no extra box. */
-const cardBodyStyle: CSSProperties = {
-  borderTop: '.5px solid var(--dsw-alias-border-l2)',
-  margin: '0 16px',
-  padding: '12px 0 8px',
-}
 /**
  * One settings row: NO box of its own (the bordered rows read as nested
  * cards, which the user ruled against) — rows are separated by a hairline

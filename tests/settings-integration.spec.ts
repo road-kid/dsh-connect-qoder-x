@@ -1,42 +1,36 @@
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import SettingsProvider from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import * as Qoder from '../src/index.ts'
 import { normalizeQoderModels } from '../src/qoder/catalog.ts'
+import { QODER_SETTINGS_FACE_PATH } from '../src/status-paths.ts'
 import { modelInfoOf } from '../src/upstream.ts'
 
 /**
- * Host-settings integration for the assembled plugin: which namespaces get a
- * served section, what fields each card owns, where writes land, and how the
- * global variant's maximum-context preference survives restarts.
+ * Settings integration for the assembled plugin, against the settings surface
+ * it actually has.
+ *
+ * On DSH 0.1.7 the plugin does NOT program the Host's settings service: it
+ * installs no section, `SettingsForms` serves one form per profile ENTRY, and
+ * `ctx.settings` is not even present here (that service declares
+ * `inject = ['configEditor', 'profileContext']`, which nothing in these tests
+ * provides). What the plugin serves instead is its OWN settings face —
+ * {@link QODER_SETTINGS_FACE_PATH} on `ctx.webServer` — backed by its own JSON
+ * file (`settings.json` in the plugin data dir). This file exercises that real
+ * path end to end: the face's GET/POST contract and its write-key guard, the
+ * directory rows the Models page joins on, per-variant independence of the
+ * catalog preferences, their survival across a restart, and the schema-level
+ * validation that still runs inside the plugin.
  *
  * WorkBuddy-era cases (device login, app-version telemetry, client identity,
  * the per-product credential-domain realm check) have no Qoder counterpart and
  * were dropped with the features they tested; the realm case is re-expressed
  * as the legacy-credential-file refusal, which is what survives of its intent.
  */
-
-class MemorySettings extends SettingsProvider {
-  readonly writable = true
-  private storedDocument: Record<string, unknown> = {}
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve(structuredClone(this.storedDocument))
-  }
-
-  protected persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
-    this.storedDocument[ns] = structuredClone(section)
-    return Promise.resolve()
-  }
-}
-
-let context: Context | undefined
-let root: string | undefined
 
 /** A Qoder credential document as the card's save would have written it. */
 function credentialDocument(pat: string, region: 'china' | 'global'): string {
@@ -47,6 +41,32 @@ function credentialDocument(pat: string, region: 'china' | 'global'): string {
 const PAT_CN = 'pt-settings-cn-0000000000000000aa'
 const PAT_GLOBAL = 'pt-settings-global-000000000000bb'
 
+let context: Context | undefined
+let root: string | undefined
+
+/**
+ * The real fetch, captured before any test stubs the global.
+ *
+ * The plugin's upstream traffic is stubbed per test; the test's OWN HTTP calls
+ * to the plugin's faces must not be, or a stub that fails every request would
+ * also swallow the settings face.
+ */
+const realFetch = globalThis.fetch
+
+/** Deferred teardown for resources that outlive one boot (the HTTP servers). */
+const CLEANUP: (() => Promise<void>)[] = []
+
+afterEach(async () => {
+  await context?.fiber.dispose()
+  context = undefined
+  for (const dispose of CLEANUP.splice(0)) await dispose()
+  if (root !== undefined) await rm(root, { recursive: true, force: true })
+  root = undefined
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+})
+
 /** Isolate the plugin's file roots and silence any real environment PAT. */
 function stubEnvRoot(): void {
   vi.stubEnv('DSH_HOME', root!)
@@ -56,16 +76,6 @@ function stubEnvRoot(): void {
   vi.stubEnv('QODER_PERSONAL_ACCESS_TOKEN', '')
   vi.stubEnv('QODER_CN_PERSONAL_ACCESS_TOKEN', '')
 }
-
-afterEach(async () => {
-  await context?.fiber.dispose()
-  context = undefined
-  if (root !== undefined) await rm(root, { recursive: true, force: true })
-  root = undefined
-  vi.restoreAllMocks()
-  vi.unstubAllEnvs()
-  vi.unstubAllGlobals()
-})
 
 /**
  * A live catalog whose one model declares two context windows (300k default,
@@ -106,62 +116,174 @@ function liveCatalogFetch(): ReturnType<typeof vi.fn> {
   })
 }
 
+/**
+ * Stands in for the Host's webServer service so the plugin's REAL routes (as
+ * wired by `apply()`, not re-mounted by hand) become callable from a test.
+ *
+ * The settings face lives inside `apply()`'s `ctx.inject(['webServer'], …)`
+ * callback, so exercising it needs the actual handler the plugin registered —
+ * which means the `webServer` inject has to fire. This service collects them.
+ */
+class FakeWebServer extends Service {
+  /** Latest instance; the class is plugged per boot. */
+  static current: FakeWebServer | undefined
+  readonly routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>>()
+
+  constructor(ctx: Context) {
+    super(ctx, 'webServer')
+    FakeWebServer.current = this
+  }
+
+  register(route: { kind: string; path: string; handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> }): () => void {
+    this.routes.set(route.path, route.handler)
+    return () => { this.routes.delete(route.path) }
+  }
+}
+
+/** Serve the captured routes over real HTTP, so the handlers see real req/res. */
+async function serve(routes: Map<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>>): Promise<{ port: number }> {
+  const server = createServer((req, res) => {
+    const handler = routes.get(new URL(req.url ?? '/', 'http://127.0.0.1').pathname)
+    if (handler === undefined) { res.writeHead(404).end('{}'); return }
+    void handler(req, res)
+  })
+  await new Promise<void>(resolve => { server.listen(0, '127.0.0.1', resolve) })
+  const port = (server.address() as { port: number }).port
+  CLEANUP.push(() => new Promise<void>(resolve => {
+    // Keep-alive sockets from the test's own fetch would otherwise hold the
+    // close callback until they time out.
+    server.closeAllConnections()
+    server.close(() => resolve())
+  }))
+  return { port }
+}
+
+/** One answer from the plugin's own HTTP face. */
+interface FaceAnswer {
+  status: number
+  body: Record<string, unknown>
+}
+
+/** The plugin's settings face, mounted on a real loopback server. */
+interface Face {
+  port: number
+  get: (path: string) => Promise<FaceAnswer>
+  post: (path: string, body: unknown, key?: string) => Promise<FaceAnswer>
+}
+
+/**
+ * Bring up whatever routes the plugin registered and address them over real
+ * HTTP. The `host` header is what the loopback guard reads, so it must name
+ * the loopback interface the way a browser would.
+ */
+async function openFace(): Promise<Face> {
+  await vi.waitFor(() => {
+    expect(FakeWebServer.current?.routes.has(QODER_SETTINGS_FACE_PATH)).toBe(true)
+  })
+  const { port } = await serve(FakeWebServer.current!.routes)
+  const call = async (method: string, path: string, body?: unknown, key?: string): Promise<FaceAnswer> => {
+    const response = await realFetch(`http://127.0.0.1:${port}${path}`, {
+      method,
+      headers: {
+        host: `127.0.0.1:${port}`,
+        ...body === undefined ? {} : { 'content-type': 'application/json' },
+        ...key === undefined ? {} : { 'x-qoder-settings-key': key },
+      },
+      ...body === undefined ? {} : { body: JSON.stringify(body) },
+    })
+    const text = await response.text()
+    return { status: response.status, body: text === '' ? {} : JSON.parse(text) as Record<string, unknown> }
+  }
+  return {
+    port,
+    get: path => call('GET', path),
+    post: (path, body, key) => call('POST', path, body, key),
+  }
+}
+
+/**
+ * Boot the plugin against the temp root.
+ *
+ * `web: true` also mounts {@link FakeWebServer}, which is what makes the
+ * plugin's own HTTP faces reachable — the same service the Host provides in
+ * production. Without it the settings face is simply never wired.
+ */
+async function boot(options: { web?: boolean } = {}): Promise<Context> {
+  const ctx = new Context()
+  context = ctx
+  await ctx.plugin(LlmRuntime)
+  if (options.web === true) await ctx.plugin(FakeWebServer)
+  await ctx.plugin(Qoder, {})
+  return ctx
+}
+
+/**
+ * Wait for the LIVE roster, not merely a visible group: the fallback names no
+ * `big-context`, so only this proves the fetch landed.
+ */
+async function waitForLiveCatalog(ctx: Context, provider: string): Promise<void> {
+  await vi.waitFor(async () => {
+    expect((await ctx.llm.listModels(provider)).map(model => model.id)).toContain('big-context')
+  }, { timeout: 15_000 })
+}
+
+/** The plugin's own settings file, which is where every write lands. */
+function settingsFile(): string {
+  return join(root!, 'settings.json')
+}
+
 describe('Qoder Host settings integration', () => {
   it('restores the saved maximum-window preference after restarting and can disable it', async () => {
     root = await mkdtemp(join(tmpdir(), 'qoder-context-restart-'))
-    const settingsFile = join(root, 'settings.json')
     const globalAuthPath = join(root, Qoder.GLOBAL_VARIANT.ownFilename)
-    await writeFile(settingsFile, '{}')
     await writeFile(globalAuthPath, credentialDocument(PAT_GLOBAL, 'global'))
     stubEnvRoot()
     vi.stubEnv('DSH_QODER_POLL_MS', '100')
     vi.stubGlobal('fetch', liveCatalogFetch())
-    class FileSettings extends SettingsProvider {
-      readonly writable = true
-      protected async load(): Promise<Record<string, unknown>> {
-        return JSON.parse(await readFile(settingsFile, 'utf8'))
-      }
 
-      protected async persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
-        const document = await this.load()
-        document[ns] = section
-        await writeFile(settingsFile, JSON.stringify(document))
-      }
-    }
-    const boot = async (): Promise<Context> => {
-      const ctx = new Context()
-      context = ctx
-      await ctx.plugin(LlmRuntime)
-      await ctx.plugin(FileSettings)
-      await ctx.plugin(Qoder, {})
-      // Wait for the LIVE roster, not merely a visible group: the fallback
-      // names no `big-context`, so only this proves the fetch landed.
-      await vi.waitFor(async () => {
-        expect((await ctx.llm.listModels('qoder-global')).map(model => model.id)).toContain('big-context')
-      }, { timeout: 15_000 })
-      return ctx
-    }
-    let ctx = await boot()
+    let ctx = await boot({ web: true })
+    await waitForLiveCatalog(ctx, 'qoder-global')
     // Fresh profile, setting never touched: the default is on, so the model
     // resolves at its largest declared window before any update is written.
     expect((await ctx.llm.resolveModelInfo('qoder-global', 'big-context')).context?.contextWindow).toBe(1_000_000)
     await ctx.fiber.dispose()
-    ctx = await boot()
-    // Still on across a restart with nothing stored (schema default, not state).
+    ctx = await boot({ web: true })
+    await waitForLiveCatalog(ctx, 'qoder-global')
+    // Still on across a restart with nothing stored but the schema default.
     expect((await ctx.llm.resolveModelInfo('qoder-global', 'big-context')).context?.contextWindow).toBe(1_000_000)
+
     // An explicit opt-out must survive restarts: the flipped default may not
-    // resurrect the preference the user turned off.
-    await ctx.settings.update(Qoder.QODER_GLOBAL_SETTINGS_NS, { useMaximumContextWindow: false })
+    // resurrect the preference the user turned off. It is written the way the
+    // card writes it — a POST to the plugin's own settings face, authorized
+    // with the key its GET document hands out — so this exercises the real
+    // validate → store → apply → rearm path rather than the store file alone.
+    const face = await openFace()
+    const document = await face.get(QODER_SETTINGS_FACE_PATH)
+    expect(document.status).toBe(200)
+    const written = await face.post(
+      QODER_SETTINGS_FACE_PATH,
+      { useMaximumContextWindow: false },
+      document.body.key as string,
+    )
+    expect(written.status).toBe(200)
     await vi.waitFor(async () => {
       expect((await ctx.llm.resolveModelInfo('qoder-global', 'big-context')).context?.contextWindow).toBe(300_000)
     }, { timeout: 10_000 })
+    // The write landed in the plugin's own file, marked as a card edit so the
+    // seed rule keeps it authoritative over the (empty) entry config.
+    expect(JSON.parse(await readFile(settingsFile(), 'utf8'))).toMatchObject({
+      useMaximumContextWindow: false,
+      __writes: 1,
+    })
+
     await ctx.fiber.dispose()
-    ctx = await boot()
-    expect(ctx.settings.get(Qoder.QODER_GLOBAL_SETTINGS_NS)).toMatchObject({ useMaximumContextWindow: false })
+    ctx = await boot({ web: true })
+    await waitForLiveCatalog(ctx, 'qoder-global')
+    // The stored opt-out is restored, not the schema default.
     expect((await ctx.llm.resolveModelInfo('qoder-global', 'big-context')).context?.contextWindow).toBe(300_000)
   })
 
-  it('exposes the provider directory entry, the settings section, and the fallback model list', async () => {
+  it('exposes the provider directory entry, the settings face, and the fallback model list', async () => {
     root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-settings-'))
     stubEnvRoot()
     // This case asserts the fallback roster, which is served only to a
@@ -174,11 +296,7 @@ describe('Qoder Host settings integration', () => {
     // request; these tests must not touch the network, and the roster asserted
     // below is the compiled-in fallback, so the fetch fails instead.
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline in tests') }))
-    const ctx = new Context()
-    context = ctx
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(Qoder, {})
+    const ctx = await boot({ web: true })
 
     // Registration rides on the loopback shim's listening event.
     await vi.waitFor(async () => {
@@ -192,18 +310,36 @@ describe('Qoder Host settings integration', () => {
       declared: false,
     })
 
-    // The section is what the Models settings page joins on to render a card.
-    const descriptor = ctx.settings.describe().find(entry => entry.ns === Qoder.QODER_SETTINGS_NS)
-    expect(descriptor).toBeDefined()
+    // The settings face is the plugin's own configuration surface and the
+    // 0.1.7 replacement for the Host-served section this case used to look up.
+    // Its document is the contract the client half parses: the write key, the
+    // effective values, the schema defaults, and the user layer as stored.
+    const face = await openFace()
+    const document = await face.get(QODER_SETTINGS_FACE_PATH)
+    expect(document.status).toBe(200)
+    expect(Object.keys(document.body).sort()).toEqual(['base', 'key', 'user', 'value'])
+    expect(typeof document.body.key).toBe('string')
+    expect((document.body.key as string).length).toBeGreaterThan(0)
+    // `base` is built by walking the plugin's declared configuration fields, so
+    // it is the served field list — the thing the old `describe()` gave.
+    expect(document.body.base).toMatchObject({
+      probeConsent: false,
+      useMaximumContextWindow: true,
+      quotaPollMs: Qoder.QUOTA_POLL_DEFAULT_MS,
+    })
 
     const models = await ctx.llm.listModels('qoder')
     // The fallback roster mirrors the transport's built-in Qoder pool.
     expect(models.map(model => model.id)).toEqual(expect.arrayContaining(['cmodel', 'auto', 'ultimate', 'performance', 'efficient', 'lite']))
 
-    // Billing display: the fallback rows declare no rate, so their names carry
-    // no `x<n>` suffix — the rate-unknown case must not render a fake one.
+    // Billing display: the fallback rows declare no rate, so their names must
+    // never carry a FABRICATED `x<n>` multiplier. The rate-unknown case renders
+    // explicit "price unavailable" wording instead of a bare name — a bare name
+    // where every other row shows `· x0.3` reads as a rendering bug — so what is
+    // pinned here is the absence of the fake rate, not the absence of a suffix.
     const byId = new Map(models.map(model => [model.id, model]))
-    expect(byId.get('auto')?.name).toBe('Qoder Auto')
+    expect(byId.get('auto')?.name).toBe('Qoder Auto · 价格暂不可用')
+    expect(byId.get('auto')?.name).not.toMatch(/· x\d/u)
     expect(byId.get('auto')?.description).toBeUndefined()
 
     // Thinking controls are declaration-driven: no fallback row declares a
@@ -216,14 +352,14 @@ describe('Qoder Host settings integration', () => {
     expect(modalities.get('auto')).toContain('image')
     expect(modalities.get('lite')).toEqual(['text'])
 
-    // A settings write validates against the schema and persists. The China
-    // section owns one field — `probeConsent` — so that is the write to make,
-    // and the stored value is read back both through the live descriptor and
-    // through the section's own document.
-    await ctx.settings.update(Qoder.QODER_SETTINGS_NS, { probeConsent: true })
-    const updated = ctx.settings.describe().find(entry => entry.ns === Qoder.QODER_SETTINGS_NS)
-    expect((updated?.value as Record<string, unknown>)['probeConsent']).toBe(true)
-    expect(ctx.settings.get(Qoder.QODER_SETTINGS_NS)).toMatchObject({ probeConsent: true })
+    // A settings write is validated against the served field list, persisted to
+    // the plugin's own file, and echoed back in both layers of the document.
+    // The China card owns `probeConsent`, so that is the write to make.
+    const updated = await face.post(QODER_SETTINGS_FACE_PATH, { probeConsent: true }, document.body.key as string)
+    expect(updated.status).toBe(200)
+    expect(updated.body.value).toMatchObject({ probeConsent: true })
+    expect(updated.body.user).toMatchObject({ probeConsent: true })
+    expect(JSON.parse(await readFile(settingsFile(), 'utf8'))).toMatchObject({ probeConsent: true })
   })
 
   /**
@@ -244,11 +380,7 @@ describe('Qoder Host settings integration', () => {
     await writeFile(join(root, Qoder.GLOBAL_VARIANT.ownFilename), credentialDocument(PAT_GLOBAL, 'global'))
     vi.stubGlobal('fetch', liveCatalogFetch())
 
-    const ctx = new Context()
-    context = ctx
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(Qoder, {})
+    const ctx = await boot({ web: true })
 
     await vi.waitFor(async () => {
       // Both arms must be serving the LIVE roster before the per-variant
@@ -261,63 +393,58 @@ describe('Qoder Host settings integration', () => {
     )
 
     // Each provider carries its own display name, which is the model group
-    // heading the picker renders — and its OWN settings namespace: the Models
-    // page resolves `settingsNs` against served sections, so a shared ns would
-    // render both providers onto one card.
+    // heading the picker renders — and its OWN settings namespace. The Models
+    // page resolves `settingsNs` against the served configuration, so a shared
+    // ns would render both providers onto one card. That distinctness is the
+    // whole of the directory contract that survives on 0.1.7: the plugin
+    // installs no Host section, so there is no "served namespace" list left to
+    // check a card key against — the Plugins page dispatches its card by the
+    // `plugins.row.config` slot key (`<package>#<entry id>`), which the client
+    // half owns and the host half never sees. The old assertion that every
+    // variant id was a served settings namespace is therefore GONE with the
+    // sections it described; what replaced it is the per-variant `settingsNs`
+    // pinned here plus the face field list pinned below.
     expect(ctx.llm.listConfigurableProviders()).toEqual(expect.arrayContaining([
       { provider: 'qoder', displayName: 'Qoder', settingsNs: 'qoder', settingsPath: [], declared: false },
       { provider: 'qoder-global', displayName: 'Qoder Global', settingsNs: 'qoder-global', settingsPath: [], declared: false },
     ]))
 
-    // THE DISPATCH CONTRACT. The Plugins tab renders a card by
-    // `renderSlot('settings.plugin.item', {}, { entryKey: ns })` for each
-    // namespace the Host serves, and skips an entry whose key names no served
-    // namespace — the tab builds its list from sections, never from the slot's
-    // registrations. A card whose variant id is not a served ns therefore
-    // registers but never renders, which is exactly the bug this pins: every
-    // variant id must be an installed section's namespace.
-    const served = new Set(ctx.settings.describe().map(entry => entry.ns))
-    for (const variant of Qoder.QODER_VARIANTS) {
-      expect(served, `card key "${variant.id}" must be a served settings namespace`).toContain(variant.id)
-    }
-    expect(served).toContain(Qoder.QODER_QUOTA_SETTINGS_NS)
-
     // Each section owns only its own fields, so one card's form cannot edit the
-    // other's preference. `describe()` reports the schema as schemastery's ref
-    // graph; the root object's `dict` is the field map.
-    const fieldsOf = (ns: string): string[] => {
-      const descriptor = ctx.settings.describe().find(entry => entry.ns === ns)
-      const root = (descriptor?.schema as { refs?: Record<string, { dict?: Record<string, unknown> }>, uid?: string } | undefined)?.refs?.[String((descriptor?.schema as { uid?: number } | undefined)?.uid)]
-      return Object.keys(root?.dict ?? {})
-    }
-    // No credential-path field survives on either card: a credential is a PAT
-    // pasted into the card and stored by the plugin, so there is nothing left
-    // to point at a file.
-    //
-    // Each section is pinned to the field list its merge copies. A field the
-    // section stores but the merge drops reads `undefined` to the rest of the
-    // plugin — the card saves it, the file holds it, and nothing acts on it,
-    // which is how a saved auto check-in toggle silently did nothing.
-    expect(fieldsOf('qoder')).toEqual([...Qoder.CN_SECTION_KEYS])
-    expect(fieldsOf('qoder-global')).toEqual([...Qoder.GLOBAL_SECTION_KEYS])
-    expect(fieldsOf('qoder-quota')).toEqual([...Qoder.QUOTA_SECTION_KEYS])
+    // other's preference. On 0.1.7 that field list is the one the plugin's own
+    // settings face serves: `base` is built by walking exactly the union of the
+    // exported per-section lists, and that union must cover every field the
+    // schema declares — a field the schema declares but no list carries is
+    // exactly how a saved auto check-in toggle silently did nothing.
+    const face = await openFace()
+    const document = await face.get(QODER_SETTINGS_FACE_PATH)
+    expect(document.status).toBe(200)
+    const key = document.body.key as string
+    const sectionKeys = [...Qoder.CN_SECTION_KEYS, ...Qoder.GLOBAL_SECTION_KEYS, ...Qoder.QUOTA_SECTION_KEYS]
+    // Order and content: the face enumerates the section lists in merge order.
+    expect(Object.keys(document.body.base as Record<string, unknown>)).toEqual(sectionKeys)
+    // Same field set as the schema, which is what makes the lists complete.
+    expect([...sectionKeys].sort()).toEqual(Object.keys(Qoder.Config.dict ?? {}).sort())
+    // A field outside those lists is refused by name, not silently dropped.
+    const unknown = await face.post(QODER_SETTINGS_FACE_PATH, { notAField: true }, key)
+    expect(unknown.status).toBe(400)
+    expect(unknown.body.error).toBe('unknown field notAField')
 
-    // Check model disabling via settings
-    await ctx.settings.update('qoder', { disabledModelsCN: ['big-context'] })
+    // Model disabling through the face: per variant, and only for the variant
+    // whose field it names.
+    expect((await face.post(QODER_SETTINGS_FACE_PATH, { disabledModelsCN: ['big-context'] }, key)).status).toBe(200)
     await vi.waitFor(async () => {
       const modelsCN = (await ctx.llm.listModels('qoder')).map(m => m.id)
       expect(modelsCN).not.toContain('big-context')
-      const modelsGlobal = (await ctx.llm.listModels('qoder-global')).map(m => m.id)
-      expect(modelsGlobal).toContain('big-context')
     })
+    expect((await ctx.llm.listModels('qoder-global')).map(m => m.id)).toContain('big-context')
 
-    await ctx.settings.update('qoder', { disabledModelsCN: [] })
+    expect((await face.post(QODER_SETTINGS_FACE_PATH, { disabledModelsCN: [] }, key)).status).toBe(200)
     await vi.waitFor(async () => {
       const modelsCN = (await ctx.llm.listModels('qoder')).map(m => m.id)
       expect(modelsCN).toContain('big-context')
     })
 
-    // A write through one section must reach only THAT variant. The same live
+    // A write through one field must reach only THAT variant. The same live
     // roster is served to both arms, and each now carries its own maximum-window
     // preference, so the two toggles are independent observables: flipping the
     // GLOBAL one must move only the global variant's window, and the China
@@ -326,13 +453,13 @@ describe('Qoder Host settings integration', () => {
       expect((await ctx.llm.resolveModelInfo('qoder-global', 'big-context')).context?.contextWindow).toBe(1_000_000)
     }, { timeout: 10_000 })
     expect((await ctx.llm.resolveModelInfo('qoder', 'big-context')).context?.contextWindow).toBe(1_000_000)
-    await ctx.settings.update(Qoder.QODER_GLOBAL_SETTINGS_NS, { useMaximumContextWindow: false })
+    expect((await face.post(QODER_SETTINGS_FACE_PATH, { useMaximumContextWindow: false }, key)).status).toBe(200)
     await vi.waitFor(async () => {
       expect((await ctx.llm.resolveModelInfo('qoder-global', 'big-context')).context?.contextWindow).toBe(300_000)
     }, { timeout: 10_000 })
     // The China toggle is untouched: still serving the maximum.
     expect((await ctx.llm.resolveModelInfo('qoder', 'big-context')).context?.contextWindow).toBe(1_000_000)
-    await ctx.settings.update(Qoder.QODER_SETTINGS_NS, { useMaximumContextWindowCN: false })
+    expect((await face.post(QODER_SETTINGS_FACE_PATH, { useMaximumContextWindowCN: false }, key)).status).toBe(200)
     await vi.waitFor(async () => {
       expect((await ctx.llm.resolveModelInfo('qoder', 'big-context')).context?.contextWindow).toBe(300_000)
     }, { timeout: 10_000 })
@@ -349,11 +476,7 @@ describe('Qoder Host settings integration', () => {
     // exists and no environment PAT is set, which is what "nobody has signed
     // in" now means.
     stubEnvRoot()
-    const ctx = new Context()
-    context = ctx
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(Qoder, {})
+    const ctx = await boot({ web: true })
 
     await vi.waitFor(() => {
       expect(ctx.llm.listProviders().map(provider => provider.id)).toContain('qoder')
@@ -367,8 +490,45 @@ describe('Qoder Host settings integration', () => {
     // models, not by unregistering, so a later sign-in needs no restart.
     expect(ctx.llm.listConfigurableProviders().map(entry => entry.provider))
       .toEqual(expect.arrayContaining(['qoder', 'qoder-global']))
-    // And the settings card is still there to explain how to sign in.
-    expect(ctx.settings.describe().find(entry => entry.ns === Qoder.QODER_SETTINGS_NS)).toBeDefined()
+    // And the settings card is still there to explain how to sign in: the face
+    // is served and answers its document while both variants are hidden.
+    const face = await openFace()
+    const document = await face.get(QODER_SETTINGS_FACE_PATH)
+    expect(document.status).toBe(200)
+    expect(typeof document.body.key).toBe('string')
+    expect(document.body.base).toMatchObject({ probeConsent: false })
+  })
+
+  /**
+   * The settings face's write guard: the key is minted per plugin lifetime and
+   * rides the GET document (which already passed the loopback guard), and the
+   * POST authorizes with it. Without this an unauthenticated page could rewrite
+   * the user's configuration.
+   */
+  it('guards the settings face with the key its GET document hands out', async () => {
+    root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-face-key-'))
+    stubEnvRoot()
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline in tests') }))
+    await boot({ web: true })
+
+    const face = await openFace()
+    const document = await face.get(QODER_SETTINGS_FACE_PATH)
+    expect(document.status).toBe(200)
+    expect(typeof document.body.key).toBe('string')
+
+    const missing = await face.post(QODER_SETTINGS_FACE_PATH, { probeConsent: true })
+    expect(missing.status).toBe(403)
+    expect(missing.body.error).toBe('invalid-key')
+    const wrong = await face.post(QODER_SETTINGS_FACE_PATH, { probeConsent: true }, 'not-the-key')
+    expect(wrong.status).toBe(403)
+    expect(wrong.body.error).toBe('invalid-key')
+    // Neither refusal may have touched the file.
+    expect(await readFile(settingsFile(), 'utf8')).not.toContain('"probeConsent": true')
+
+    const accepted = await face.post(QODER_SETTINGS_FACE_PATH, { probeConsent: true }, document.body.key as string)
+    expect(accepted.status).toBe(200)
+    expect(accepted.body.value).toMatchObject({ probeConsent: true })
+    expect(JSON.parse(await readFile(settingsFile(), 'utf8'))).toMatchObject({ probeConsent: true, __writes: 1 })
   })
 
   /**
@@ -381,11 +541,7 @@ describe('Qoder Host settings integration', () => {
     vi.stubEnv('QODER_PERSONAL_ACCESS_TOKEN', 'pt-from-environment')
     vi.stubEnv('DSH_QODER_POLL_MS', '100')
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline in tests') }))
-    const ctx = new Context()
-    context = ctx
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(Qoder, {})
+    const ctx = await boot()
 
     await vi.waitFor(async () => {
       expect((await ctx.llm.listModels('qoder-global')).length).toBeGreaterThan(0)
@@ -412,11 +568,7 @@ describe('Qoder Host settings integration', () => {
       account: { uid: 'uid-1', nickname: 'nick', enterpriseId: 'ent-1' },
     }))
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline in tests') }))
-    const ctx = new Context()
-    context = ctx
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(Qoder, {})
+    const ctx = await boot()
 
     await vi.waitFor(() => {
       expect(ctx.llm.listProviders().map(provider => provider.id)).toContain('qoder')
@@ -430,24 +582,31 @@ describe('Qoder Host settings integration', () => {
   })
 
   /**
-   * The quota card's shared section: its namespace is served, its fields are
-   * the two sidebar toggles plus one rate limit honoured at the schema edge.
+   * The quota card's shared section: its fields are the two sidebar toggles
+   * plus the one rate limit honoured at the schema edge, and a write through
+   * the face persists where the plugin reads it back.
    */
   it('validates and persists the quota section', async () => {
     root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-quota-'))
     stubEnvRoot()
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline in tests') }))
-    const ctx = new Context()
-    context = ctx
-    await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
-    await ctx.plugin(Qoder, {})
+    const ctx = await boot({ web: true })
     await vi.waitFor(() => {
       expect(ctx.llm.listProviders().map(provider => provider.id)).toContain('qoder')
     })
 
-    await ctx.settings.update(Qoder.QODER_QUOTA_SETTINGS_NS, { sidebarQuotaCN: true })
-    expect(ctx.settings.get(Qoder.QODER_QUOTA_SETTINGS_NS)).toMatchObject({ sidebarQuotaCN: true })
+    const face = await openFace()
+    const document = await face.get(QODER_SETTINGS_FACE_PATH)
+    const key = document.body.key as string
+    const written = await face.post(QODER_SETTINGS_FACE_PATH, { sidebarQuotaCN: true }, key)
+    expect(written.status).toBe(200)
+    expect(written.body.user).toMatchObject({ sidebarQuotaCN: true })
+    expect(JSON.parse(await readFile(settingsFile(), 'utf8'))).toMatchObject({ sidebarQuotaCN: true })
+
+    // The poll floor is enforced at the face's edge as well as by the schema.
+    const tooFast = await face.post(QODER_SETTINGS_FACE_PATH, { quotaPollMs: 1_000 }, key)
+    expect(tooFast.status).toBe(400)
+    expect(tooFast.body.error).toBe('quotaPollMs must be an integer of at least 60000 ms')
 
     // The poll floor is enforced by the schema itself, not by the card. The
     // schema instance is callable: it validates and applies defaults.
@@ -509,7 +668,6 @@ describe('Qoder Host settings integration', () => {
     ctx.set('attachments', fakeAttachmentStore as any)
 
     await ctx.plugin(LlmRuntime)
-    await ctx.plugin(MemorySettings)
     await ctx.plugin(Qoder, {})
 
     await vi.waitFor(() => {

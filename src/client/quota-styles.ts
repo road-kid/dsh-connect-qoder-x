@@ -85,9 +85,6 @@ export const QUOTA_CSS = `
    chevron icon names differ per DSH line, so no static import can serve both —
    a border caret in the plugin's own CSS is version-proof (workbuddy's
    approach, restated under this plugin's qdp- prefix). */
-.qdp-chevron{flex:none;width:16px;height:16px;position:relative;transition:transform .16s}
-.qdp-chevron::before{content:"";display:block;position:absolute;left:4px;top:5px;width:7px;height:7px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg)}
-.qdp-chevronOpen{transform:rotate(180deg)}
 
 /* ------------------------------------------------------------ dashboard */
 /* The center column in the layout frame: fill it, scroll the content column,
@@ -222,14 +219,6 @@ export const QUOTA_CSS = `
 /* PAT entry row and its input. */
 .qdp-patRow{align-items:center;gap:8px;flex-wrap:wrap;display:flex}
 .qdp-patInput{box-sizing:border-box;flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.5}
-/* Collapsible section inside the card body. */
-.qdp-section{flex-direction:column;border-top:1px solid var(--dsw-alias-border-l2);padding-top:10px;display:flex}
-.qdp-sectionHeadRow{align-items:center;gap:8px;display:flex}
-.qdp-sectionHead{font:inherit;color:var(--dsw-alias-label-secondary);text-align:left;cursor:pointer;background:0 0;border:0;padding:4px 0;align-items:center;gap:8px;display:flex}
-.qdp-sectionHead:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
-.qdp-sectionTitle{font-size:13px;font-weight:600;line-height:1.5}
-.qdp-sectionActions{align-items:center;gap:6px;margin-left:auto;display:flex}
-.qdp-sectionBody{flex-direction:column;gap:12px;padding-top:10px;display:flex}
 /* The one level of variant tabs. */
 .qdp-seg{align-items:center;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:3px;gap:4px;display:flex}
 .qdp-segItem{flex:1;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:6px;padding:6px 12px;font:inherit;font-size:13px;line-height:18px;cursor:pointer;appearance:none;outline:none;color:var(--dsw-alias-label-tertiary);transition:all .16s ease;display:flex}

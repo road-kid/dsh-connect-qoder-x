@@ -52,7 +52,9 @@ export interface CheckInRecord {
   message?: string | undefined
   expiresAtMs?: number | undefined
   logs?: CheckInLogItem[] | undefined
-}/**
+}
+
+/**
  * How many claim rows the ledger keeps per variant.
  *
  * The card shows a recent window (30 days) and the benefit renews daily, so

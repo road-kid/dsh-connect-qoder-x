@@ -5,8 +5,6 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import SettingsProvider from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import * as Qoder from '../src/index.ts'
 import { QoderCredentialStore, qoderCredentialIdentity } from '../src/auth.ts'
 import { fingerprintModel } from '../src/probe-store.ts'
@@ -25,21 +23,11 @@ import { modelInfoOf } from '../src/upstream.ts'
  * rather than one canned envelope per call. Accounts are keyed by the PAT in
  * the exchanged body, then followed through the job token and the `Cosy-User`
  * header, which is what lets one roster answer for one account.
+ *
+ * No host settings service is mounted: this plugin owns its settings outright
+ * (`settings.json` beside the credential, written through its own HTTP face),
+ * so `ctx.settings` plays no part in the behaviour these cases exercise.
  */
-
-class MemorySettings extends SettingsProvider {
-  readonly writable = true
-  private storedDocument: Record<string, unknown> = {}
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve(structuredClone(this.storedDocument))
-  }
-
-  protected persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
-    this.storedDocument[ns] = structuredClone(section)
-    return Promise.resolve()
-  }
-}
 
 const CLEANUP: (() => Promise<void>)[] = []
 let context: Context | undefined
@@ -222,7 +210,6 @@ async function boot(): Promise<Context> {
   const ctx = new Context()
   context = ctx
   await ctx.plugin(LlmRuntime)
-  await ctx.plugin(MemorySettings)
   await ctx.plugin(FakeWebServer)
   await ctx.plugin(Qoder, {})
   await vi.waitFor(() => {
