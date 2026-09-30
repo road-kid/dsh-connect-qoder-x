@@ -513,6 +513,14 @@ describe('Unified Qoder Plugin Card', () => {
                   status: 'claimed',
                   amount: 100,
                 },
+                {
+                  id: 'log-2',
+                  date: '2026-09-21',
+                  timestamp: 1700003600000,
+                  status: 'already-claimed',
+                  amount: 100,
+                  message: 'Already claimed today',
+                },
               ],
             },
           }),
@@ -553,14 +561,61 @@ describe('Unified Qoder Plugin Card', () => {
     // 界面能显示几条就显示几条。这条 fixture 的 timestamp 是 2023-11-15,
     // 旧版会把它过滤掉并给出空态;现在这笔领取直接列出,「+100」就在行上。
     expect(view!.root.findAll(n => n.children.includes(en.ledgerEmpty))).toHaveLength(0)
+    // 台账只收真正领到的笔。fixture 特意多放了一条 already-claimed 观察记录,
+    // 它的时间只是那次请求的时钟、不是发放时刻,所以不能变成第二行 —— 这正是
+    // 用户报的「同一笔出现 17:47 / 23:12 两行」。
     const ledgerRows = view!.root.findAll(n => n.children.includes('+100'))
-    expect(ledgerRows.length).toBeGreaterThanOrEqual(1)
+    expect(ledgerRows).toHaveLength(1)
 
     // The day is already claimed in this fixture, so the claim button reads
     // 「今日已签到」 and is DISABLED — the action is not re-offered.
     const claimedBtn = view!.root.findAll(n => n.children.includes(en.checkInClaimedToday))[0]
     expect(claimedBtn).toBeDefined()
     expect(claimedBtn!.props.disabled).toBe(true)
+  })
+
+  it('keeps the claim button disabled when the day was already claimed upstream', async () => {
+    request.mockImplementation(async (url: string) => {
+      if (String(url) === QODER_STATUS_PATH) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'signed-in',
+            region: 'china',
+            pat: { source: 'card', savedAtMs: 1700000000000, patTail: '1111' },
+            authKey: 'cn-auth-key',
+            credits: { total: 30, accounts: [] },
+            models: [],
+            checkIn: {
+              lastDate: '2026-09-21',
+              lastAt: 1700003600000,
+              status: 'already-claimed',
+              amount: 100,
+              message: 'Already claimed today',
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ status: 'signed-out' }) }
+    })
+
+    await act(async () => {
+      view = create(createElement(QoderPluginCard, {
+        t: t as any,
+        unified: true,
+        view: 'page',
+      } as any))
+    })
+
+    // 「上游今天已经领过」也是领取过的状态:按钮必须保持灰掉 + 今日已签到。
+    // 旧代码只认 claimed,already-claimed 会把按钮重新点亮,再点一次就又多
+    // 一行用点击时钟盖章的 +100 —— 用户截图里的 17:47 / 23:12 就是这么来的。
+    const claimedBtn = view!.root.findAll(n => n.children.includes(en.checkInClaimedToday))[0]
+    expect(claimedBtn).toBeDefined()
+    expect(claimedBtn!.props.disabled).toBe(true)
+    // 这条观察不是一次发放,台账里不该出现 +100 行。
+    expect(view!.root.findAll(n => n.children.includes('+100'))).toHaveLength(0)
   })
 
   it('stores a typed check-in time as minutes past midnight in UTC+8', async () => {

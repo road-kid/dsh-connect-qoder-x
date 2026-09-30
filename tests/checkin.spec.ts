@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { QoderCheckInService, type QoderCheckInResult } from '../src/qoder/transport/checkin.ts'
 import type { QoderAuthService } from '../src/qoder/transport/auth.ts'
@@ -5,6 +8,7 @@ import {
   CheckInScheduler,
   DEFAULT_CHECK_IN_MINUTE,
   isPastCheckInTime,
+  JsonFileCheckInStore,
   msUntilNextCheckIn,
   normalizeCheckInMinute,
   type CheckInStatusStore,
@@ -531,5 +535,24 @@ describe('CheckInScheduler', () => {
     expect(saved?.logs).toHaveLength(30)
     // Most recent is first
     expect(saved?.logs?.[0]?.date).toBe('2026-09-35')
+  })
+
+  it('mints a ledger row only for a genuine grant', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'qoder-checkin-'))
+    try {
+      const store = new JsonFileCheckInStore(join(dir, 'checkin-status.json'))
+      const grantedAt = 1790502156407
+      store.write('qoder', { lastDate: '2026-09-27', lastAt: grantedAt, status: 'claimed', amount: 100 })
+      expect(store.read('qoder')?.logs).toHaveLength(1)
+      store.write('qoder', { lastDate: '2026-09-27', lastAt: 1790521920000, status: 'already-claimed', amount: 100 })
+      expect(store.read('qoder')?.logs).toHaveLength(1)
+      expect(store.read('qoder')?.logs?.[0]?.timestamp).toBe(grantedAt)
+      store.write('qoder', { lastDate: '2026-09-28', lastAt: 1790600000000, status: 'no-campaign' })
+      expect(store.read('qoder')?.logs).toHaveLength(1)
+      store.write('qoder', { lastDate: '2026-09-28', lastAt: 1790600000001, status: 'claimed', amount: 100 })
+      expect(store.read('qoder')?.logs?.map(e => e.date)).toEqual(['2026-09-28', '2026-09-27'])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

@@ -330,8 +330,17 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
   logsDisabled?: boolean | undefined
   onClearLogs?: (() => void) | undefined
 }): React.ReactNode {
-  /** Today's claim already happened (the upstream said so, or the log does). */
-  const claimedToday = checkIn !== undefined && checkIn.status === 'claimed'
+  /**
+   * Today's benefit is already in — whether this process granted it or merely
+   * found the upstream reporting it as claimed.
+   *
+   * `already-claimed` must count: the upstream answers that way for every later
+   * request on a claimed day, so treating only `claimed` as "done" re-armed the
+   * button and invited the repeat click that used to append a phantom ledger
+   * row (see the ledger's filter below).
+   */
+  const claimedToday = checkIn !== undefined
+    && (checkIn.status === 'claimed' || checkIn.status === 'already-claimed')
   return (
     /*
      * 不再有外框(需求 1,按 m02352 截图):上一版这里包了一层 qdp-panel,
@@ -473,9 +482,16 @@ function CheckInLedger({ logs, t, clearing, disabled, onClear }: {
    * .qdp-ledgerList 的 max-height),多了就滚动 —— 而不是悄悄丢掉。
    */
   const claimed = (logs ?? [])
-    // 已领取的记录才入账:no-campaign / error 不是资源包,列出来只会让人以为
-    // 领到了什么。
-    .filter(entry => entry.status === 'claimed' || entry.status === 'already-claimed')
+    /*
+     * 只有真的领到的那一笔才入账。
+     *
+     * `already-claimed` 是「上游今天已经领过」的观察,不是一次领取 —— 它的
+     * timestamp 是那次请求的时钟,不是发放时刻(上游根本不回传发放时刻),
+     * 所以把它当成一笔资源包会在台账上写出一个从未发生过的时间。这份台账要
+     * 回答的是「我手上有哪些资源包、各自的到期日」,所以只统计 claimed;
+     * no-campaign / error 同样不是资源包。
+     */
+    .filter(entry => entry.status === 'claimed')
     .sort((a, b) => b.timestamp - a.timestamp)
   /*
    * 「3 天内到期」只统计在这个窗口内真的会作废的笔 —— 不是「所有还没过期的」。

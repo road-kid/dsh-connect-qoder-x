@@ -1692,13 +1692,35 @@ export function apply(ctx: Context, config: Config): void {
         checkIn: async () => {
           const result = await runtime.checkIn()
           if (result.status !== 'error') {
-            checkInStore.write(runtime.variant.id, {
-              lastDate: result.date,
-              lastAt: result.timestamp,
-              status: result.status,
-              ...result.amount === undefined ? {} : { amount: result.amount },
-              ...result.message === undefined ? {} : { message: result.message },
-            })
+            /*
+             * A day already settled by a GENUINE grant is not written again.
+             *
+             * The upstream answers `already-claimed` for every later request on
+             * a claimed day, and that answer carries the CLICK clock rather
+             * than the grant's, so re-writing the record would restamp the day
+             * with a time the grant never happened at. The store would no
+             * longer mint a ledger row for it (see `JsonFileCheckInStore`), but
+             * the record itself is what the card reads, so the honest move is
+             * to keep the original settlement and report the fresh answer.
+             */
+            const settled = (() => {
+              const record = checkInStore.read(runtime.variant.id)
+              return record?.lastDate === result.date
+                && (record.status === 'claimed' || record.status === 'already-claimed')
+            })()
+            if (!settled) {
+              checkInStore.write(runtime.variant.id, {
+                lastDate: result.date,
+                lastAt: result.timestamp,
+                status: result.status,
+                ...result.amount === undefined ? {} : { amount: result.amount },
+                ...result.message === undefined ? {} : { message: result.message },
+                // The granted package's own window when the upstream reported
+                // one; absent leaves the card's documented 30-day convention
+                // for a manual grant rather than a guessed date.
+                ...result.expiresAtMs === undefined ? {} : { expiresAtMs: result.expiresAtMs },
+              })
+            }
             if (result.status === 'claimed') {
               void runtime.client.fetchCredits().catch(() => undefined)
             }

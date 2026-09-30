@@ -120,7 +120,22 @@ export class JsonFileCheckInStore implements CheckInStatusStore {
         ...record.message === undefined ? {} : { message: record.message },
         ...record.expiresAtMs === undefined ? {} : { expiresAtMs: record.expiresAtMs },
       }
-      const updatedLogs = [newLog, ...existingLogs.filter(l => l.id !== newLog.id)].slice(0, CHECK_IN_LOG_LIMIT)
+      /*
+       * Only a GENUINE grant earns a ledger row.
+       *
+       * The upstream reports no grant instant — every result carries the clock
+       * the request was made at — so a row minted from an observation would
+       * state a claim time that never happened. That is exactly how the card
+       * came to show two 「+100」 rows at 17:47 and 23:12 for a single 17:42
+       * grant: each repeat click (and each scheduled sweep over an
+       * already-claimed day) appended its own row, and the 30-day validity
+       * back-fill then dated both of them. The top-level record still updates
+       * below, so the day guard and the card's state line stay correct; only
+       * the history is restricted to claims.
+       */
+      const updatedLogs = record.status === 'claimed'
+        ? [newLog, ...existingLogs.filter(entry => entry.id !== newLog.id)].slice(0, CHECK_IN_LOG_LIMIT)
+        : existingLogs
       all[variantId] = {
         ...record,
         logs: updatedLogs,
