@@ -33,6 +33,7 @@ import {
   LlmError,
   ReasoningEffortId,
   ToolCallId,
+  type ContentBlock,
   type GenerateOptions,
   type Message,
   type StreamChunk,
@@ -42,7 +43,7 @@ import type { AttachmentStore, ImageMediaType } from '@deepseek-ai/dsh-attachmen
 import { PROBE_MAX_TOKENS, PROBE_PROMPT, type ProbeAttempt } from './probe.ts'
 import type { QoderCatalogModel } from './qoder/catalog.ts'
 import type { QoderRegion } from './qoder/region.ts'
-import type { QoderAccountInfo, QoderQuotaUsage } from './qoder/account.ts'
+import type { QoderAccountInfo, QoderQuotaUsage, QoderSubscriberPlan } from './qoder/account.ts'
 import { qoderQueueSignal } from './qoder/errors.ts'
 import { createQoderTransport, type QoderCheckInResult, type QoderTransport } from './qoder/transport/index.ts'
 import type { QoderModelBilling, QoderModelInfo, QoderModelReasoning } from './catalog.ts'
@@ -250,13 +251,18 @@ function decodeDataImage(url: string): { mediaType: ImageMediaType; data: Uint8A
  * With `imagesAs`, image parts are offered for commit — and a request that
  * carries them without any commit path fails as a client error, because the
  * Qoder wire can only ever transport a durable attachment reference.
+ *
+ * The accumulator is a plain mutable array because the caller keeps appending
+ * (tool calls join the assistant turn after its text and images); it is typed
+ * as `ContentBlock[]` rather than `Message['content']` because 0.1.7 made the
+ * latter `readonly`.
  */
 async function openAiContentBlocks(
   content: unknown,
   role: 'user' | 'assistant',
   imagesAs: { commit(part: { mediaType: ImageMediaType; data: Uint8Array }): Promise<Message['content'][number]> } | undefined,
-): Promise<Message['content']> {
-  const blocks: Message['content'] = []
+): Promise<ContentBlock[]> {
+  const blocks: ContentBlock[] = []
   const parts: readonly unknown[] = typeof content === 'string' || content === null || content === undefined
     ? (typeof content === 'string' && content !== '' ? [{ type: 'text', text: content }] : [])
     : Array.isArray(content)
@@ -634,6 +640,16 @@ export class QoderUpstreamClient {
    * without a second upstream request.
    */
   accountName: string | undefined
+  /**
+   * The subscriber's coding plan from the same account read.
+   *
+   * `readAccount` already fetches `/api/v2/user/plan` on every call — the
+   * answer was parsed and then dropped, so the card could show the credits a
+   * plan grants without ever naming the plan. Cached here beside
+   * {@link accountName} for the same reason: the status document needs it
+   * without a second upstream request.
+   */
+  accountPlan: QoderSubscriberPlan | undefined
 
   constructor(options: QoderUpstreamClientOptions) {
     this.region = options.region
@@ -694,6 +710,8 @@ export class QoderUpstreamClient {
     // Record WHO this billing answer belongs to; the name rides the next
     // status document and the PAT box shows it beside the token tail.
     this.accountName = account.profile.name === '' ? undefined : account.profile.name
+    // Same read, same place: the plan the credits above belong to.
+    this.accountPlan = account.plan
     const usage: QoderQuotaUsage = account.usage ?? {}
     const accounts: QoderCreditAccount[] = []
     const personal = usage.userQuota

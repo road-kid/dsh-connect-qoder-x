@@ -1242,7 +1242,13 @@ async function cleanupEntryConfig(ctx: Parameters<typeof apply>[0], ownKeys: rea
         : undefined
       const editor = (own ?? await new Promise<unknown>(resolve => {
         ctx.inject(['settings'], settingsCtx => {
-          const owner = (settingsCtx.settings as { ownerContext?: { get?: (name: string) => unknown } } | undefined)?.ownerContext
+          // `ownerContext` is a PRIVATE class member in 0.1.7, so the shape cast
+          // has to route through `unknown`: TS2352 rejects the direct cast
+          // because the two types no longer overlap. The runtime probe is
+          // unchanged and still guards with `typeof owner?.get === 'function'`,
+          // so a version that renames or removes the member degrades to
+          // `undefined` here instead of throwing.
+          const owner = (settingsCtx.settings as unknown as { ownerContext?: { get?: (name: string) => unknown } } | undefined)?.ownerContext
           const viaOwner = typeof owner?.get === 'function'
             ? (() => { try { return owner.get.call(owner, 'configEditor') } catch { return undefined } })()
             : undefined
@@ -1582,6 +1588,7 @@ export function apply(ctx: Context, config: Config): void {
         store: runtime.store,
         client: runtime.client,
         accountName: () => runtime.client.accountName,
+        plan: () => runtime.client.accountPlan,
         models: () => runtime.catalog.all(),
         catalog: () => catalogSection(runtime),
         probe: () => probeSection(runtime, current().probeConsent === true),

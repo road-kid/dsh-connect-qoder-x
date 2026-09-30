@@ -87,6 +87,30 @@ export interface QoderPatSummary {
   accountName?: string
 }
 
+/**
+ * The subscriber's coding plan, as the card displays it.
+ *
+ * The upstream's `/api/v2/user/plan` answer is fetched on every account read
+ * but had no consumer: the card could show how many credits were left without
+ * ever naming the plan those credits belong to, so a paid seat looked exactly
+ * like a free one. This is the browser-safe projection of that answer — only
+ * the facts the card renders, with the raw payload and the organization's
+ * management flags left behind on the host side.
+ *
+ * Only `planTierName` is required. The upstream omits dates and organization
+ * for personal seats, and a plan the upstream did not describe is absent
+ * entirely rather than invented; renderers show what is present and omit the
+ * rest instead of guessing a tier or a date.
+ */
+export interface QoderWebPlan {
+  /** The plan's display name, e.g. "Pro". */
+  planTierName: string
+  /** The organization the seat belongs to, when it is not a personal one. */
+  organizationName?: string
+  /** When the current plan term ends, verbatim from the upstream. */
+  endDate?: string
+}
+
 /** One model's recorded probe observation, as the card displays it. */
 export interface QoderWebProbeModel {
   id: string
@@ -225,6 +249,13 @@ export type QoderWebStatus =
     region?: QoderRegion
     /** Redacted summary of the PAT in effect. */
     pat?: QoderPatSummary
+    /**
+     * The subscriber's coding plan, when the upstream described one.
+     *
+     * Absent for an account whose plan read failed or reported nothing —
+     * renderers omit the line rather than guess a tier.
+     */
+    plan?: QoderWebPlan
     credits?: QoderWebCredits
     creditsError?: string
     /** The models the plugin serves, as catalog snapshots. */

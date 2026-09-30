@@ -138,6 +138,52 @@ describe('signed-in document assembly', () => {
     expect(doc.pat).toEqual({ source: 'env', patTail: 'wxyz' })
   })
 
+  it('carries the coding plan, reduced to the facts the card renders', async () => {
+    const own = join(await tempDir(), '.qoder-auth.json')
+    await writePatDoc(own)
+    const doc = await qoderWebStatus({
+      ...baseDeps(own),
+      plan: () => ({
+        userType: 'pro',
+        planTierName: 'Pro',
+        planTier: 'tier-pro',
+        isPersonalVersion: false,
+        isHighestTier: true,
+        startDate: '2025-11-15T00:00:00.000Z',
+        endDate: '2026-11-15T00:00:00.000Z',
+        organization: {
+          orgId: 'org-1',
+          orgName: 'DeepSeek Harness Team',
+          roleName: 'Owner',
+          isSuspended: false,
+          canManageSubscriptions: true,
+          resourcePackageFeatureEnabled: true,
+        },
+        raw: { secret_internal_marker: 'do-not-ship' },
+      }),
+    })
+    expect(doc.status).toBe('signed-in')
+    if (doc.status !== 'signed-in') return
+    expect(doc.plan).toEqual({
+      planTierName: 'Pro',
+      organizationName: 'DeepSeek Harness Team',
+      endDate: '2026-11-15T00:00:00.000Z',
+    })
+    // The raw payload and the organization's management flags stay host-side.
+    const wire = JSON.stringify(doc)
+    expect(wire).not.toContain('do-not-ship')
+    expect(wire).not.toContain('canManageSubscriptions')
+  })
+
+  it('omits the plan entirely when the upstream did not describe one', async () => {
+    const own = join(await tempDir(), '.qoder-auth.json')
+    await writePatDoc(own)
+    const doc = await qoderWebStatus({ ...baseDeps(own), plan: () => undefined })
+    expect(doc.status).toBe('signed-in')
+    if (doc.status !== 'signed-in') return
+    expect('plan' in doc).toBe(false)
+  })
+
   it('attaches probe state, probeKey, and the window preference only together', async () => {
     const own = join(await tempDir(), '.qoder-auth.json')
     await writePatDoc(own)

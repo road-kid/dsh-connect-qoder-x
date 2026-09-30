@@ -12,11 +12,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { QoderCredentialStore } from './auth.ts'
 import type { QoderUpstreamClient } from './upstream.ts'
+import type { QoderSubscriberPlan } from './qoder/account.ts'
 import { normalizeCredits } from './upstream.ts'
 import type { QoderModelInfo } from './catalog.ts'
 import { hostIsLoopback, originIsLoopback } from './loopback.ts'
 import { QODER_STATUS_PATH } from './status-paths.ts'
-import type { QoderCatalogModelSnapshot, QoderPatSummary, QoderWebCatalog, QoderWebProbeSection, QoderWebStatus } from './status-paths.ts'
+import type { QoderCatalogModelSnapshot, QoderPatSummary, QoderWebCatalog, QoderWebPlan, QoderWebProbeSection, QoderWebStatus } from './status-paths.ts'
 
 export { QODER_STATUS_PATH } from './status-paths.ts'
 export type { QoderWebStatus } from './status-paths.ts'
@@ -47,6 +48,14 @@ export interface QoderStatusRouteOptions {
   authKey?: string
   /** The subscriber name to show beside the PAT summary; optional. */
   accountName?: () => string | undefined
+  /**
+   * The subscriber's coding plan as the transport read it; optional.
+   *
+   * Projected here into the browser-safe {@link QoderWebPlan} so the raw
+   * upstream payload — and the organization record's management flags — never
+   * crosses to the page.
+   */
+  plan?: () => QoderSubscriberPlan | undefined
   /** Card preference selecting larger declared context windows. */
   useMaximumContextWindow?: () => boolean
   /** Disabled models query for this variant. */
@@ -165,6 +174,17 @@ export async function qoderWebStatus(deps: QoderStatusRouteOptions): Promise<Qod
     }
   }
   const accountName = deps.accountName?.()
+  // The plan projection rides the same account read as the name. Only the
+  // fields the card renders cross over: the raw payload stays host-side, and
+  // the organization is reduced to its display name.
+  const plan = deps.plan?.()
+  const planField: QoderWebPlan | undefined = plan === undefined
+    ? undefined
+    : {
+      planTierName: plan.planTierName,
+      ...plan.organization?.orgName === undefined ? {} : { organizationName: plan.organization.orgName },
+      ...plan.endDate === undefined ? {} : { endDate: plan.endDate },
+    }
   // The signed-in arm's pat summary, extended with the subscriber name when
   // the upstream reported one. Typed against the arm's own field so the
   // optional-spreading below stays exactOptionalPropertyTypes-clean.
@@ -180,6 +200,9 @@ export async function qoderWebStatus(deps: QoderStatusRouteOptions): Promise<Qod
     status: 'signed-in',
     ...authStatus.region === undefined ? {} : { region: authStatus.region },
     ...patSummary === undefined ? {} : { pat: patSummary },
+    // The plan describes the account, not the credential, so it rides the
+    // same document as the name it belongs beside.
+    ...planField === undefined ? {} : { plan: planField },
     // Both arms carry the key: a signed-in card needs it to clear the token,
     // and omitting it here made that action unreachable.
     ...deps.authKey === undefined ? {} : { authKey: deps.authKey },
