@@ -302,6 +302,17 @@ type QoderWebStatus = {
    */
   checkIn?: {
     lastDate: string;
+    /**
+     * Today's date in UTC+8, computed host-side.
+     *
+     * The card must compare `lastDate` against today before calling a day
+     * settled, and it must NOT do that comparison with the browser's clock:
+     * the plugin standardizes on UTC+8 deliberately, while the browser sits
+     * in whatever timezone the user is in. Shipping the host's own UTC+8
+     * answer means both halves read one clock, and the browser never has to
+     * reimplement the offset arithmetic.
+     */
+    today: string;
     lastAt: number;
     status: 'claimed' | 'already-claimed' | 'no-campaign' | 'error';
     amount?: number | undefined;
@@ -799,6 +810,15 @@ interface QoderCheckInResult {
    * unknown rather than guessed.
    */
   expiresAtMs?: number | undefined;
+  /**
+   * A stable reason code for a failed attempt, when one applies.
+   *
+   * Carried alongside `message` so the card can localize the one failure the
+   * user can actually act on — `no-client` means this machine has no Qoder
+   * client to mint the device identity the international campaign requires —
+   * instead of matching on English prose.
+   */
+  reasonCode?: 'no-client' | undefined;
 }
 //#endregion
 //#region src/qoder/transport/index.d.ts
@@ -1324,9 +1344,19 @@ declare class QoderProbeService {
 type QoderAuthSaveResult = {
   ok: true;
   status: QoderAuthStatus;
-} | {
+} |
+/**
+ * `qoder_invalid_pat` — the upstream answered and refused this token.
+ * `qoder_unreachable` — no answer came (timeout, transport, 5xx), so the
+ * token's validity is simply unknown; the card must offer a retry rather
+ * than telling the user to replace a credential that was never judged.
+ * `qoder_missing_pat` — nothing was submitted.
+ */
+{
   ok: false;
-  error: 'qoder_invalid_pat' | 'qoder_missing_pat';
+  error: 'qoder_invalid_pat' | 'qoder_missing_pat' | 'qoder_unreachable';
+  /** Upstream detail for the message; absent when there is nothing to say. */
+  reason?: string | undefined;
 };
 /** Constructor dependencies. */
 interface QoderAuthRouteOptions {

@@ -31,7 +31,7 @@ import { getMachineId } from './qoder/transport/machine-id.ts'
 import { qoderMachineIdPath } from './paths.ts'
 import { registerQoderStatusRoute } from './web-status.ts'
 import { createProbeKey, registerQoderProbeRoute } from './probe-route.ts'
-import { CheckInScheduler, DEFAULT_CHECK_IN_MINUTE, JsonFileCheckInStore, normalizeCheckInMinute } from './checkin-scheduler.ts'
+import { CheckInScheduler, DEFAULT_CHECK_IN_MINUTE, JsonFileCheckInStore, getUtc8DateString, normalizeCheckInMinute } from './checkin-scheduler.ts'
 import type { QoderModelInfo } from './catalog.ts'
 import type { QoderWebCatalog, QoderWebProbeSection } from './status-paths.ts'
 import { QODER_SETTINGS_FACE_PATH } from './status-paths.ts'
@@ -1616,6 +1616,11 @@ export function apply(ctx: Context, config: Config): void {
             ...nextRunAt === undefined ? {} : { nextRunAt },
           }
         },
+        // The card decides whether the record describes TODAY, and it must do
+        // so against the plugin's own UTC+8 day rather than the browser's
+        // clock. Called per request, so a host left running past midnight
+        // UTC+8 reports the new day instead of pinning yesterday's answer.
+        today: () => getUtc8DateString(),
       })
       registerQoderAuthRoute(webCtx, {
         path: runtime.variant.authPath,
@@ -1624,8 +1629,17 @@ export function apply(ctx: Context, config: Config): void {
           // written: a token that cannot answer discovery is refused with a
           // stable code, and the file never holds a credential the plugin has
           // not seen work.
-          if (!await validateApiKey(pat, runtime.variant.region)) {
-            return { ok: false, error: 'qoder_invalid_pat' as const }
+          //
+          // "Refused" and "could not ask" are different answers, and they were
+          // previously collapsed into `qoder_invalid_pat` — which told a user
+          // with a perfectly good token to go replace it whenever the endpoint
+          // was slow or unreachable. The unreachable case keeps its own code so
+          // the card can say "try again" instead of "your token is wrong".
+          const validation = await validateApiKey(pat, runtime.variant.region)
+          if (!validation.ok) {
+            return validation.error === 'invalid'
+              ? { ok: false, error: 'qoder_invalid_pat' as const, reason: validation.reason }
+              : { ok: false, error: 'qoder_unreachable' as const, reason: validation.reason }
           }
           const credential = await runtime.store.save(pat)
           // Saving a token is the one transition the sweep would otherwise only
@@ -1728,6 +1742,7 @@ export function apply(ctx: Context, config: Config): void {
           return {
             state: result.status,
             ...result.amount === undefined ? {} : { amount: result.amount },
+            ...result.reasonCode === undefined ? {} : { reasonCode: result.reasonCode },
             ...result.message === undefined ? {} : { reason: result.message },
           }
         },

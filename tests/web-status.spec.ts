@@ -235,6 +235,71 @@ describe('signed-in document assembly', () => {
   })
 })
 
+/*
+ * `today` is what lets the card tell a record describing TODAY from a stale
+ * one. Without it the card fell back on `status` alone and greyed the claim
+ * button out forever after a single check-in — the reported bug.
+ */
+describe('check-in day stamping', () => {
+  it('stamps the host’s UTC+8 day onto the record', async () => {
+    const own = join(await tempDir(), '.qoder-auth.json')
+    await writePatDoc(own)
+    const doc = await qoderWebStatus({
+      ...baseDeps(own),
+      checkIn: () => ({ lastDate: '2026-09-27', lastAt: 1, status: 'claimed', amount: 100 }),
+      today: () => '2026-09-30',
+    })
+    expect(doc.status).toBe('signed-in')
+    if (doc.status !== 'signed-in') return
+    // Both ride the document: the record the card renders, and the day it
+    // must compare that record against.
+    expect(doc.checkIn?.lastDate).toBe('2026-09-27')
+    expect(doc.checkIn?.today).toBe('2026-09-30')
+  })
+
+  it('reads the day per request rather than capturing it once', async () => {
+    const own = join(await tempDir(), '.qoder-auth.json')
+    await writePatDoc(own)
+    let day = '2026-09-30'
+    const deps: QoderStatusRouteOptions = {
+      ...baseDeps(own),
+      checkIn: () => ({ lastDate: day, lastAt: 1, status: 'claimed', amount: 100 }),
+      today: () => day,
+    }
+    const first = await qoderWebStatus(deps)
+    // A host left running across midnight UTC+8 must report the new day, or
+    // the card keeps calling yesterday settled for the process's whole life.
+    day = '2026-10-01'
+    const second = await qoderWebStatus(deps)
+    if (first.status !== 'signed-in' || second.status !== 'signed-in') return
+    expect(first.checkIn?.today).toBe('2026-09-30')
+    expect(second.checkIn?.today).toBe('2026-10-01')
+  })
+
+  it('falls back to the real UTC+8 day when no date dependency is wired', async () => {
+    const own = join(await tempDir(), '.qoder-auth.json')
+    await writePatDoc(own)
+    const doc = await qoderWebStatus({
+      ...baseDeps(own),
+      checkIn: () => ({ lastDate: '2026-09-27', lastAt: 1, status: 'claimed', amount: 100 }),
+    })
+    if (doc.status !== 'signed-in') return
+    // Never absent: a missing `today` makes `lastDate === today` false and
+    // would silently re-offer a claim the upstream already granted.
+    expect(doc.checkIn?.today).toMatch(/^\d{4}-\d{2}-\d{2}$/u)
+  })
+
+  it('omits the whole check-in field when this variant has no record', async () => {
+    const own = join(await tempDir(), '.qoder-auth.json')
+    await writePatDoc(own)
+    const doc = await qoderWebStatus({ ...baseDeps(own), checkIn: () => undefined, today: () => '2026-09-30' })
+    if (doc.status !== 'signed-in') return
+    // A variant that never checked in needs no date, and an empty record
+    // would put a 「今日已签到」-shaped object on the card with no claim behind it.
+    expect(doc.checkIn).toBeUndefined()
+  })
+})
+
 describe('signed-out document', () => {
   it('says signed-out with the authKey and nothing else', async () => {
     const dir = await tempDir()

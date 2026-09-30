@@ -502,6 +502,15 @@ describe('Unified Qoder Plugin Card', () => {
             models: [],
             checkIn: {
               lastDate: '2026-09-21',
+              /*
+               * `today` is pinned in the fixture rather than read from the
+               * clock, so this test asserts the claimed-day rendering without
+               * depending on when it runs. The DATE stays deliberately in the
+               * past: a card that ignored `today` would render this record as
+               * 「今日已签到」 forever, which is the bug the stale-day test
+               * below pins from the other side.
+               */
+              today: '2026-09-21',
               lastAt: 1700000000000,
               status: 'claimed',
               amount: 100,
@@ -589,6 +598,9 @@ describe('Unified Qoder Plugin Card', () => {
             models: [],
             checkIn: {
               lastDate: '2026-09-21',
+              // Same-day as the record, so the defensive `already-claimed`
+              // branch is what keeps the button greyed out — not the date.
+              today: '2026-09-21',
               lastAt: 1700003600000,
               status: 'already-claimed',
               amount: 100,
@@ -616,6 +628,111 @@ describe('Unified Qoder Plugin Card', () => {
     expect(claimedBtn!.props.disabled).toBe(true)
     // 这条观察不是一次发放,台账里不该出现 +100 行。
     expect(view!.root.findAll(n => n.children.includes('+100'))).toHaveLength(0)
+  })
+
+  it('re-offers the claim when the stored record is from an earlier day', async () => {
+    /*
+     * 用户报的 bug:没有签到,卡片却显示「今日已签到」,按钮永远是灰的。
+     *
+     * checkIn 是**持久化记录**,不是实时读数。旧代码只看 status,于是三天前
+     * 那笔 claimed 一直满足条件,按钮从此再也点不动 —— 记录里的 lastDate 根本
+     * 没被读过。这里让记录停在几天前、today 落在今天,断言按钮必须重新可点。
+     */
+    request.mockImplementation(async (url: string) => {
+      if (String(url) === QODER_STATUS_PATH) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'signed-in',
+            region: 'china',
+            pat: { source: 'card', savedAtMs: 1700000000000, patTail: '1111' },
+            authKey: 'cn-auth-key',
+            credits: { total: 30, accounts: [] },
+            models: [],
+            checkIn: {
+              lastDate: '2026-09-27',
+              // 记录停在 09-27,今天是 09-30:这一天并没有签到。
+              today: '2026-09-30',
+              lastAt: 1790502156407,
+              status: 'claimed',
+              amount: 100,
+              logs: [
+                {
+                  id: '2026-09-27-1790502156407',
+                  date: '2026-09-27',
+                  timestamp: 1790502156407,
+                  status: 'claimed',
+                  amount: 100,
+                },
+              ],
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ status: 'signed-out' }) }
+    })
+
+    await act(async () => {
+      view = create(createElement(QoderPluginCard, {
+        t: t as any,
+        unified: true,
+        view: 'page',
+      } as any))
+    })
+
+    // 按钮必须回到「立即领取」并重新可点 —— 今天还没领。
+    expect(view!.root.findAll(n => n.children.includes(en.checkInClaimedToday))).toHaveLength(0)
+    const claimBtn = view!.root.findAll(n => n.children.includes(en.checkInNow))[0]
+    expect(claimBtn).toBeDefined()
+    expect(claimBtn!.props.disabled).toBe(false)
+    // 历史那一笔仍然在台账里:过去领到的东西不会因为跨天而消失。
+    expect(view!.root.findAll(n => n.children.includes('+100'))).toHaveLength(1)
+  })
+
+  it('treats a same-day failed attempt as retryable, not as claimed', async () => {
+    /*
+     * 日期相等不等于领到了。no-campaign / error 是今天失败的一次尝试,
+     * 按钮必须保持可点 —— 否则一次上游抖动就把这一整天烧掉了,这正是
+     * 调度器 sweepOne 里那条「只有真的领到才算数」的客户端对应物。
+     */
+    request.mockImplementation(async (url: string) => {
+      if (String(url) === QODER_STATUS_PATH) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'signed-in',
+            region: 'china',
+            pat: { source: 'card', savedAtMs: 1700000000000, patTail: '1111' },
+            authKey: 'cn-auth-key',
+            credits: { total: 30, accounts: [] },
+            models: [],
+            checkIn: {
+              lastDate: '2026-09-30',
+              today: '2026-09-30',
+              lastAt: 1790600000000,
+              status: 'no-campaign',
+              message: 'No claimable benefit campaign found for this region',
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ status: 'signed-out' }) }
+    })
+
+    await act(async () => {
+      view = create(createElement(QoderPluginCard, {
+        t: t as any,
+        unified: true,
+        view: 'page',
+      } as any))
+    })
+
+    expect(view!.root.findAll(n => n.children.includes(en.checkInClaimedToday))).toHaveLength(0)
+    const claimBtn = view!.root.findAll(n => n.children.includes(en.checkInNow))[0]
+    expect(claimBtn).toBeDefined()
+    expect(claimBtn!.props.disabled).toBe(false)
   })
 
   it('stores a typed check-in time as minutes past midnight in UTC+8', async () => {

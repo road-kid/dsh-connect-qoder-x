@@ -41,6 +41,12 @@ describe('Qoder plugin card', () => {
   let holdPosts = false
   const intervalHandles = new Map<number, () => void>()
   let nextHandle = 1
+  /**
+   * The host's answer to the 「刷新模型」 action. Mutable because the route
+   * reports a FAILED model refresh as HTTP 200 with `{state:'failed', reason}`
+   * — the shape the card used to ignore.
+   */
+  let refreshReply: unknown = { state: 'refreshed', reason: '12 models' }
 
   function signedIn(overrides: Partial<QoderWebStatus> = {}): void {
     statusBody = {
@@ -65,6 +71,7 @@ describe('Qoder plugin card', () => {
     posts.length = 0
     releaseQueue = []
     intervalHandles.clear()
+    refreshReply = { state: 'refreshed', reason: '12 models' }
     vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
       if (init?.method === 'POST') {
         const url = String(input)
@@ -94,6 +101,7 @@ describe('Qoder plugin card', () => {
     const action = JSON.parse(String(init.body)) as { action?: string }
     if (action.action === 'save-pat') return { ok: true, status: 'saved' }
     if (action.action === 'clear') return { ok: true }
+    if (action.action === 'refresh') return refreshReply
     return { state: 'ok', validation: 'non-validating', efforts: [] }
   }
 
@@ -411,6 +419,43 @@ describe('Qoder plugin card', () => {
     const tree = JSON.stringify(view!.toJSON())
     expect(tree).toContain(en.statusRefreshFailed.split('{message}')[0]!)
     expect(tree).toContain(en.signedIn) // the document is still rendered
+  })
+
+  it('surfaces the reason when the MODEL refresh reports a failure in a 200 body', async () => {
+    /*
+     * The route answers HTTP 200 with `{state:'failed', reason}` for a refresh
+     * that could not reach the upstream. Checking `response.ok` alone — what
+     * the card used to do — threw nothing and said nothing, so the user saw
+     * stale models and a failure with no explanation. The reason must reach
+     * the screen.
+     */
+    await mount()
+    await openPane(en.paneModels)
+    refreshReply = { state: 'failed', reason: 'Qoder model discovery network request failed.' }
+    await press(en.refreshModels)
+    const tree = JSON.stringify(view!.toJSON())
+    expect(tree).toContain('Qoder model discovery network request failed.')
+    expect(tree).toContain(en.statusRefreshFailed.split('{message}')[0]!)
+  })
+
+  it('keeps a successful model refresh quiet', async () => {
+    await mount()
+    await openPane(en.paneModels)
+    refreshReply = { state: 'refreshed', reason: '12 models' }
+    await press(en.refreshModels)
+    const tree = JSON.stringify(view!.toJSON())
+    // No error line, and the host's internal count is not shown as a message.
+    expect(tree).not.toContain(en.statusRefreshFailed.split('{message}')[0]!)
+    expect(tree).not.toContain('12 models')
+  })
+
+  it('falls back to the generic label when a failed refresh gives no reason', async () => {
+    await mount()
+    await openPane(en.paneModels)
+    refreshReply = { state: 'failed' }
+    await press(en.refreshModels)
+    const tree = JSON.stringify(view!.toJSON())
+    expect(tree).toContain(en.requestFailed)
   })
 
   it('turns an unreadable 200 into the error arm rather than dereferencing it', async () => {

@@ -11,6 +11,7 @@ import { isQoderAuthRejection, QoderLlmError } from '../errors.ts'
 import type { QoderLogger } from './logging.ts'
 import { openApiJsonRequest } from './request.ts'
 import { qoderDesktopClientType } from './wire/cosy.ts'
+import { resolveRiskIdentity, type QoderRiskIdentity } from './risk-identity.ts'
 
 export interface QoderCampaignBenefit {
   kind?: string
@@ -66,6 +67,15 @@ export interface QoderCheckInResult {
    * unknown rather than guessed.
    */
   expiresAtMs?: number | undefined
+  /**
+   * A stable reason code for a failed attempt, when one applies.
+   *
+   * Carried alongside `message` so the card can localize the one failure the
+   * user can actually act on — `no-client` means this machine has no Qoder
+   * client to mint the device identity the international campaign requires —
+   * instead of matching on English prose.
+   */
+  reasonCode?: 'no-client' | undefined
 }
 
 export interface QoderCheckInServiceOptions {
@@ -75,9 +85,32 @@ export interface QoderCheckInServiceOptions {
   variantId?: string | undefined
   logger?: QoderLogger | undefined
   timeoutMs?: number | undefined
+  /**
+   * How this machine's risk identity is obtained. Injectable because the real
+   * resolver shells out to a signed native binary that only exists where a
+   * Qoder client is installed, which no test environment can rely on.
+   */
+  riskIdentity?: ((region: QoderRegion, uid: string) => Promise<QoderRiskIdentity | undefined>) | undefined
 }
 
 const defaultCheckInTimeoutMs = 15_000
+
+/**
+ * The identity headers a real desktop client sends, or an empty set.
+ *
+ * An absent identity is NOT silently equivalent to a present one: the
+ * international upstream withholds the daily campaign from a request without
+ * it, so the caller distinguishes the two and reports the absence rather than
+ * letting it look like "there is no campaign today".
+ */
+function riskHeaders(identity: QoderRiskIdentity | undefined): Record<string, string> {
+  if (identity === undefined) return {}
+  return {
+    'cosy-machinetoken': identity.machineToken,
+    'cosy-machinecode': identity.machineCode,
+    'cosy-machinetype': identity.machineType,
+  }
+}
 
 /**
  * When a claimed package expires, in epoch milliseconds; undefined when the
@@ -112,6 +145,7 @@ export class QoderCheckInService {
   private readonly variantId: string
   private readonly logger: QoderLogger | undefined
   private readonly timeoutMs: number
+  private readonly riskIdentity: (region: QoderRegion, uid: string) => Promise<QoderRiskIdentity | undefined>
 
   constructor(options: QoderCheckInServiceOptions) {
     this.authService = options.authService
@@ -120,16 +154,17 @@ export class QoderCheckInService {
     this.variantId = options.variantId ?? 'qoder'
     this.logger = options.logger
     this.timeoutMs = options.timeoutMs ?? defaultCheckInTimeoutMs
+    this.riskIdentity = options.riskIdentity ?? resolveRiskIdentity
   }
 
-  async fetchCampaigns(token: string, signal?: AbortSignal): Promise<QoderCampaign[]> {
+  async fetchCampaigns(token: string, signal?: AbortSignal, identity?: QoderRiskIdentity): Promise<QoderCampaign[]> {
     const url = getQoderCampaignsUrl(this.region)
     const data = await openApiJsonRequest<QoderCampaignsResponse>(this.fetchImpl, {
       url,
       token,
       // The campaign family gates on the desktop identifier; the generic one
       // answers 200 with an empty list (see `qoderDesktopClientType`).
-      headers: { 'cosy-clienttype': qoderDesktopClientType },
+      headers: { 'cosy-clienttype': qoderDesktopClientType, ...riskHeaders(identity) },
       signal,
       timeoutMs: this.timeoutMs,
       logger: this.logger,
@@ -139,14 +174,14 @@ export class QoderCheckInService {
     return Array.isArray(data?.campaigns) ? data.campaigns : []
   }
 
-  async claimCampaign(token: string, campaignId: string, signal?: AbortSignal): Promise<QoderClaimResponse> {
+  async claimCampaign(token: string, campaignId: string, signal?: AbortSignal, identity?: QoderRiskIdentity): Promise<QoderClaimResponse> {
     const url = getQoderClaimCampaignUrl(this.region, campaignId)
     const { openApiUrl } = resolveQoderEndpoints(this.region)
     return openApiJsonRequest<QoderClaimResponse>(this.fetchImpl, {
       url,
       method: 'POST',
       token,
-      headers: { origin: openApiUrl, 'cosy-clienttype': qoderDesktopClientType },
+      headers: { origin: openApiUrl, 'cosy-clienttype': qoderDesktopClientType, ...riskHeaders(identity) },
       signal,
       timeoutMs: this.timeoutMs,
       logger: this.logger,
@@ -179,8 +214,31 @@ export class QoderCheckInService {
       }
     }
 
-    const executeWithToken = async (authToken: string): Promise<QoderCheckInResult> => {
-      const campaigns = await this.fetchCampaigns(authToken, signal)
+    const executeWithToken = async (authToken: string, uid: string): Promise<QoderCheckInResult> => {
+      /*
+       * The machine identity is resolved BEFORE the campaign list is read, and
+       * its absence is reported rather than papered over.
+       *
+       * Qoder's international service withholds the daily campaign from a
+       * request that carries no client-minted machine identity, and answers
+       * HTTP 200 with an innocuous list either way. Asking without one would
+       * therefore produce `no-campaign` — a claim about the ACCOUNT that is
+       * really a statement about this process. Only the international region
+       * gates on it; the China region ignores it entirely, so a machine
+       * without a client installed keeps working there.
+       */
+      const identity = await this.riskIdentity(this.region, uid)
+      if (identity === undefined && this.region === 'global') {
+        return {
+          variantId: this.variantId,
+          date: today,
+          timestamp: nowMs,
+          status: 'error',
+          reasonCode: 'no-client',
+          message: 'No Qoder desktop client found on this machine, so the daily campaign cannot be requested. Install Qoder (international) and retry.',
+        }
+      }
+      const campaigns = await this.fetchCampaigns(authToken, signal, identity)
       // Look for daily benefit campaign (actionType === 'CLAIM_BENEFIT')
       const benefitCampaign = campaigns.find(c => c.actionType === 'CLAIM_BENEFIT')
       if (!benefitCampaign) {
@@ -208,7 +266,7 @@ export class QoderCheckInService {
       }
 
       // Claim it
-      const claimResult = await this.claimCampaign(authToken, benefitCampaign.campaignId, signal)
+      const claimResult = await this.claimCampaign(authToken, benefitCampaign.campaignId, signal, identity)
       const isClaimed = claimResult.status === 'CLAIMED'
       const replayed = Boolean(claimResult.replayed)
       const amount = claimResult.benefit?.amount ?? benefitCampaign.benefit?.amount ?? 100
@@ -240,13 +298,13 @@ export class QoderCheckInService {
     try {
       const creds = await this.authService.getCredentials(pat, signal)
       try {
-        return await executeWithToken(creds.authToken)
+        return await executeWithToken(creds.authToken, creds.userID)
       } catch (innerError) {
         // If 401 token rejection, attempt one fresh token rotation and retry
         if (isQoderAuthRejection(innerError)) {
           this.logger?.warn?.(`[Qoder CheckIn] Auth token rejected, retrying with fresh exchange`)
           const freshCreds = await this.authService.exchangeFresh(pat, signal)
-          return await executeWithToken(freshCreds.authToken)
+          return await executeWithToken(freshCreds.authToken, freshCreds.userID)
         }
         throw innerError
       }

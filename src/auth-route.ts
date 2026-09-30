@@ -29,7 +29,19 @@ const MAX_BODY_BYTES = 16 * 1024
 /** Outcome of a save attempt: stored, or refused with a stable reason. */
 export type QoderAuthSaveResult =
   | { ok: true; status: QoderAuthStatus }
-  | { ok: false; error: 'qoder_invalid_pat' | 'qoder_missing_pat' }
+  /**
+   * `qoder_invalid_pat` — the upstream answered and refused this token.
+   * `qoder_unreachable` — no answer came (timeout, transport, 5xx), so the
+   * token's validity is simply unknown; the card must offer a retry rather
+   * than telling the user to replace a credential that was never judged.
+   * `qoder_missing_pat` — nothing was submitted.
+   */
+  | {
+    ok: false
+    error: 'qoder_invalid_pat' | 'qoder_missing_pat' | 'qoder_unreachable'
+    /** Upstream detail for the message; absent when there is nothing to say. */
+    reason?: string | undefined
+  }
 
 /** Constructor dependencies. */
 export interface QoderAuthRouteOptions {

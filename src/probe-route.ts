@@ -55,8 +55,13 @@ export interface QoderProbeRouteOptions {
   setModelContextWindow?: (options: { model: string; window: number }) => Promise<{ state: string; reason?: string }>
   /** Drop every recorded check-in log entry for this variant. */
   clearCheckInLogs?: () => void
-  /** Trigger manual check-in for this variant. */
-  checkIn?: () => Promise<{ state: string; reason?: string; amount?: number }>
+  /**
+   * Trigger manual check-in for this variant.
+   *
+   * `reasonCode` rides along with `reason` so the card can localize the one
+   * failure the user can act on (`no-client`) rather than parsing prose.
+   */
+  checkIn?: () => Promise<{ state: string; reason?: string; amount?: number; reasonCode?: string }>
   /**
    * Route path to mount. Defaults to the CN variant's path so existing callers
    * and tests keep their behaviour; the international variant passes its own.

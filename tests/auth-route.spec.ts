@@ -289,7 +289,9 @@ describe('route identity is the variant', () => {
 describe('save wiring: validateApiKey decides what reaches the store', () => {
   it('validateApiKey answers false for a blank token without touching the network', async () => {
     const fetchMock = vi.fn()
-    await expect(validateApiKey('   ', 'china', { fetch: fetchMock })).resolves.toBe(false)
+    const result = await validateApiKey('   ', 'china', { fetch: fetchMock })
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ error: 'invalid' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

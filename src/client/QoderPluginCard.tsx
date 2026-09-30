@@ -338,8 +338,21 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
    * request on a claimed day, so treating only `claimed` as "done" re-armed the
    * button and invited the repeat click that used to append a phantom ledger
    * row (see the ledger's filter below).
+   *
+   * The DATE must count too, and this is the part that was missing. `checkIn`
+   * is the persisted record, not a live reading: a `claimed` row from three
+   * days ago satisfies the status test forever, so the button stayed greyed
+   * out reading 「今日已签到」 on days the user had not checked in at all —
+   * the record's own `lastDate` was never consulted. Comparing against
+   * `today` (stamped host-side in UTC+8, the day the scheduler itself uses)
+   * returns the button to 「立即领取」 once the record stops describing today.
+   *
+   * Both tests are required, and neither is redundant: `status` alone pins the
+   * button forever, while a date alone would treat a failed or no-campaign
+   * attempt earlier today as a completed claim.
    */
   const claimedToday = checkIn !== undefined
+    && checkIn.lastDate === checkIn.today
     && (checkIn.status === 'claimed' || checkIn.status === 'already-claimed')
   return (
     /*
@@ -1027,6 +1040,21 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     const key = status?.status === 'signed-in' ? status.probeKey : undefined
     if (key === undefined) return
     setBusy(true)
+    /*
+     * A failed refresh must say WHY, and the reason travels in the BODY.
+     *
+     * The route answers HTTP 200 for a failed refresh and puts the failure in
+     * `{state:'failed', reason}` — so checking `response.ok` alone (what this
+     * used to do) treated every failure as a success: no throw, no message,
+     * just the old model list still on screen. That is exactly the reported
+     * "refresh does not work and shows a failure notice with no reason":
+     * whatever the user saw came from somewhere else, because this path could
+     * not report anything at all.
+     *
+     * The body is parsed the same way `manualCheckIn` below parses it, so both
+     * manual actions report their outcome consistently.
+     */
+    let result: { state?: string; reason?: string } | undefined
     const controller = trackController()
     try {
       const response = await fetch(currentVariant.probePath, {
@@ -1037,6 +1065,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
         body: JSON.stringify({ action: 'refresh' } satisfies QoderProbeAction),
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      result = await response.json() as { state?: string; reason?: string }
     } catch (error: unknown) {
       if (mounted.current && controller.signal.aborted !== true) {
         setReadFailure(error instanceof Error ? error.message : t('requestFailed'))
@@ -1046,6 +1075,18 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     } finally {
       if (mounted.current) setBusy(false)
     }
+    /*
+     * The failure branch returns BEFORE the status re-read: `refresh()` would
+     * repaint the card with the same stale catalog, and leaving the reason on
+     * screen is the whole point. `state: 'refreshed'` (or an absent state from
+     * an older host) falls through and re-reads as before.
+     */
+    if (result.state === 'failed') {
+      if (mounted.current) setReadFailure(result.reason ?? t('requestFailed'))
+      manualControllers.current.delete(controller)
+      return
+    }
+    if (result.state === 'refreshed' && mounted.current) setReadFailure(undefined)
     try {
       await refresh(controller.signal)
     } finally {
@@ -1068,13 +1109,22 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
         body: JSON.stringify({ action: 'checkin' } satisfies QoderProbeAction),
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const result = await response.json() as { state?: string; amount?: number; reason?: string }
+      const result = await response.json() as { state?: string; amount?: number; reason?: string; reasonCode?: string }
       if (result.state === 'claimed') {
         setCheckInNotice(t('autoCheckInStatusClaimed', { amount: result.amount ?? 100 }))
       } else if (result.state === 'already-claimed') {
         setCheckInNotice(t('autoCheckInStatusAlready'))
       } else if (result.state === 'no-campaign') {
         setCheckInNotice(t('autoCheckInStatusNoCampaign'))
+      } else if (result.reasonCode === 'no-client') {
+        /*
+         * The one failure the user can fix, so it gets its own sentence
+         * instead of the generic "error: <English prose>" line. The
+         * international campaign is only served to requests carrying an
+         * identity minted by an installed Qoder client, so its absence is a
+         * missing dependency, not a broken account.
+         */
+        setCheckInNotice(t('checkInNeedsClient'))
       } else if (result.reason) {
         setCheckInNotice(t('autoCheckInStatusError', { message: result.reason }))
       }
@@ -1201,9 +1251,19 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
         return
       }
       if (record['ok'] !== true) {
-        setPatError(detail === 'qoder_invalid_pat' || detail === 'qoder_missing_pat'
-          ? t('patInvalid')
-          : t('patSaveFailed', { message: detail }))
+        /*
+         * Three outcomes, three messages. `qoder_unreachable` must NOT say the
+         * token is bad: nothing judged it, so the honest instruction is to
+         * retry, and the upstream detail rides along in `reason`.
+         */
+        const reason = typeof record['reason'] === 'string' ? record['reason'] : t('requestFailed')
+        if (detail === 'qoder_invalid_pat' || detail === 'qoder_missing_pat') {
+          setPatError(t('patInvalid'))
+        } else if (detail === 'qoder_unreachable') {
+          setPatError(t('patUnreachable', { message: reason }))
+        } else {
+          setPatError(t('patSaveFailed', { message: detail }))
+        }
         return
       }
       setPatDraft('')

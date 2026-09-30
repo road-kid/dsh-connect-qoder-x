@@ -65,6 +65,9 @@ describe('QoderCheckInService', () => {
       variantId: 'qoder',
       region: 'china',
       fetch: mockFetch,
+      riskIdentity: async () => undefined,
+      // China does not gate on the machine identity; stubbing it keeps the
+      // suite hermetic instead of spawning the host's real client helper.
     })
 
     const result = await service.checkIn('pt-test')
@@ -95,6 +98,9 @@ describe('QoderCheckInService', () => {
       variantId: 'qoder',
       region: 'china',
       fetch: mockFetch,
+      riskIdentity: async () => undefined,
+      // China does not gate on the machine identity; stubbing it keeps the
+      // suite hermetic instead of spawning the host's real client helper.
     })
 
     const result = await service.checkIn('pt-test')
@@ -122,6 +128,9 @@ describe('QoderCheckInService', () => {
       variantId: 'qoder-global',
       region: 'global',
       fetch: mockFetch,
+      // A stub identity, so this asserts about the campaign list rather than
+      // about whether the machine running the suite has Qoder installed.
+      riskIdentity: async () => ({ machineToken: 't', machineCode: 'c', machineType: 'y' }),
     })
 
     const result = await service.checkIn('pt-test')
@@ -144,6 +153,9 @@ describe('QoderCheckInService', () => {
       variantId: 'qoder',
       region: 'china',
       fetch: mockFetch,
+      riskIdentity: async () => undefined,
+      // China does not gate on the machine identity; stubbing it keeps the
+      // suite hermetic instead of spawning the host's real client helper.
     })
     await service.checkIn('pt-test')
 
@@ -185,6 +197,9 @@ describe('QoderCheckInService', () => {
       variantId: 'qoder',
       region: 'china',
       fetch: mockFetch,
+      riskIdentity: async () => undefined,
+      // China does not gate on the machine identity; stubbing it keeps the
+      // suite hermetic instead of spawning the host's real client helper.
     })
 
     const result = await service.checkIn('pt-test')
@@ -554,5 +569,103 @@ describe('CheckInScheduler', () => {
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('QoderCheckInService risk identity', () => {
+  function createMockAuth(token = 'mock-job-token'): QoderAuthService {
+    return {
+      getCredentials: vi.fn(async () => ({ authToken: token, userID: 'u1', name: 'User', email: 'u@test.com', machineID: 'm1' })),
+      exchangeFresh: vi.fn(async () => ({ authToken: token + '-fresh', userID: 'u1', name: 'User', email: 'u@test.com', machineID: 'm1' })),
+      clear: vi.fn(),
+    } as unknown as QoderAuthService
+  }
+
+  /**
+   * The identity headers are what make an international check-in possible at
+   * all: the upstream withholds the daily campaign from a request that does
+   * not carry a client-minted machine identity. These tests pin the request
+   * SHAPE, so a future refactor of the header merge cannot silently drop them
+   * again — the failure mode is invisible (HTTP 200, no error, no campaign).
+   */
+  it('sends the client machine identity with the campaign request', async () => {
+    const auth = createMockAuth()
+    const seen: (Record<string, string> | undefined)[] = []
+    const mockFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      seen.push(init?.headers as Record<string, string> | undefined)
+      return new Response(JSON.stringify({ campaigns: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+
+    const service = new QoderCheckInService({
+      authService: auth,
+      variantId: 'qoder-global',
+      region: 'global',
+      fetch: mockFetch,
+      riskIdentity: async () => ({
+        machineToken: 'P1g-test-token',
+        machineCode: 'code-1',
+        machineType: 'type-1',
+      }),
+    })
+    await service.checkIn('pt-test')
+
+    const headers = seen[0] ?? {}
+    // Three headers, all present, none of them the self-made machine id the
+    // transport used to substitute: the upstream only honours a token it can
+    // verify against the account being fingerprinted.
+    expect(headers['cosy-machinetoken']).toBe('P1g-test-token')
+    expect(headers['cosy-machinecode']).toBe('code-1')
+    expect(headers['cosy-machinetype']).toBe('type-1')
+    expect(headers['cosy-clienttype']).toBe('10')
+  })
+
+  it('reports a missing client instead of claiming the account has no campaign', async () => {
+    const auth = createMockAuth()
+    const mockFetch = vi.fn(async () => {
+      throw new Error('the campaign endpoint must not be reached without an identity')
+    }) as unknown as typeof fetch
+
+    const service = new QoderCheckInService({
+      authService: auth,
+      variantId: 'qoder-global',
+      region: 'global',
+      fetch: mockFetch,
+      riskIdentity: async () => undefined,
+    })
+    const result = await service.checkIn('pt-test')
+    // `no-campaign` would blame the ACCOUNT for what is really a missing local
+    // client, which is exactly the misdiagnosis this guard exists to prevent.
+    expect(result.status).toBe('error')
+    expect(result.message).toContain('No Qoder desktop client')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the China region working without any client identity', async () => {
+    const auth = createMockAuth()
+    const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+      campaigns: [{
+        campaignId: 'camp-1',
+        campaignKey: 'daily-100',
+        actionType: 'CLAIM_BENEFIT',
+        claimStatus: 'CLAIMABLE',
+        benefit: { amount: 100 },
+      }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
+
+    const service = new QoderCheckInService({
+      authService: auth,
+      variantId: 'qoder',
+      region: 'china',
+      fetch: mockFetch,
+      riskIdentity: async () => undefined,
+    })
+    const result = await service.checkIn('pt-test')
+    // The China upstream does not gate on the machine identity, so its check-in
+    // must not start failing on a machine without a client installed.
+    expect(result.status).toBe('error')
+    expect(result.message).toContain('Claim returned status')
   })
 })

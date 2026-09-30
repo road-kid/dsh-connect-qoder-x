@@ -194,28 +194,74 @@ export function kindFromQoderFailure(failure: { code: string; status?: number | 
   return 'server'
 }
 
-/** Whether a Personal Access Token works against one region's endpoints. */
+/**
+ * Why a PAT could not be accepted, or that it was.
+ *
+ * A bare boolean conflated two very different situations: a token the upstream
+ * actively REFUSED, and a token we never managed to ask about because the
+ * endpoint was slow, unreachable, or timed out. Both used to answer `false`,
+ * which the card rendered as "invalid PAT" — telling the user to replace a
+ * credential that was probably fine, and hiding a network problem behind a
+ * credential problem. The reason is now carried out so each case can be
+ * reported honestly.
+ */
+export type QoderKeyValidation =
+  | { ok: true }
+  /** The upstream answered, and rejected this token. */
+  | { ok: false; error: 'invalid'; reason: string }
+  /** We never got an answer: timeout, transport failure, or a server 5xx. */
+  | { ok: false; error: 'unreachable'; reason: string }
+
+/**
+ * Whether a Personal Access Token works against one region's endpoints.
+ *
+ * Never throws: every outcome is reported as a value, so the caller can
+ * distinguish "the token is wrong" from "we could not find out".
+ */
 export async function validateApiKey(
   pat: string,
   region: QoderRegion,
   options: { timeoutMs?: number; fetch?: typeof fetch } = {},
-): Promise<boolean> {
+): Promise<QoderKeyValidation> {
   const trimmed = pat.trim()
-  if (trimmed === '') return false
+  if (trimmed === '') return { ok: false, error: 'invalid', reason: 'the token is empty' }
+  const timeoutMs = options.timeoutMs ?? 15_000
   try {
     const transport = createQoderTransport({
       region,
       resolvePat: async () => trimmed,
       ...options.fetch === undefined ? {} : { fetch: options.fetch },
-      metadataTimeoutMs: options.timeoutMs ?? 15_000,
+      metadataTimeoutMs: timeoutMs,
     })
-    await transport.discoverModels(AbortSignal.timeout(options.timeoutMs ?? 15_000))
-    return true
-  } catch {
-    // Any failure — bad token, unreachable endpoint, timeout — answers the
-    // card's one question the same way: this token cannot be saved.
-    return false
+    await transport.discoverModels(AbortSignal.timeout(timeoutMs))
+    return { ok: true }
+  } catch (error: unknown) {
+    return classifyKeyValidationFailure(error)
   }
+}
+
+/**
+ * Split a discovery failure into "the token was refused" and "no answer came".
+ *
+ * Only the first is the user's to fix. A timeout, a transport error, or a 5xx
+ * says nothing about the token, and reporting those as an invalid credential
+ * is what sent users hunting for a replacement PAT during a slow cold start.
+ */
+export function classifyKeyValidationFailure(error: unknown): QoderKeyValidation {
+  const message = error instanceof Error ? error.message : String(error)
+  // `LlmError` carries the classified failure every transport path reports;
+  // anything else (a raw throw) has no failure to read, so it can only be an
+  // unreachable-endpoint condition.
+  const failure = error instanceof LlmError ? error.failure : undefined
+  if (failure === undefined) return { ok: false, error: 'unreachable', reason: message.slice(0, 200) }
+  // A refused credential, at any layer: the exchange rejected it, or the
+  // gateway answered 401/403 for it.
+  if (failure.code === 'AUTH' || failure.status === 401 || failure.status === 403) {
+    return { ok: false, error: 'invalid', reason: message.slice(0, 200) }
+  }
+  // Anything else — TIMEOUT, TRANSPORT, SERVER, MALFORMED_RESPONSE, an empty
+  // roster — is a condition of the endpoint or the network, not of the token.
+  return { ok: false, error: 'unreachable', reason: message.slice(0, 200) }
 }
 
 /** A request the OpenAI layer itself could not accept; the shim answers 400. */

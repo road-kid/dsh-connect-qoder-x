@@ -286,6 +286,17 @@ export type QoderWebStatus =
      */
     checkIn?: {
       lastDate: string
+      /**
+       * Today's date in UTC+8, computed host-side.
+       *
+       * The card must compare `lastDate` against today before calling a day
+       * settled, and it must NOT do that comparison with the browser's clock:
+       * the plugin standardizes on UTC+8 deliberately, while the browser sits
+       * in whatever timezone the user is in. Shipping the host's own UTC+8
+       * answer means both halves read one clock, and the browser never has to
+       * reimplement the offset arithmetic.
+       */
+      today: string
       lastAt: number
       status: 'claimed' | 'already-claimed' | 'no-campaign' | 'error'
       amount?: number | undefined

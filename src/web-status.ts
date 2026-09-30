@@ -16,6 +16,7 @@ import type { QoderSubscriberPlan } from './qoder/account.ts'
 import { normalizeCredits } from './upstream.ts'
 import type { QoderModelInfo } from './catalog.ts'
 import { hostIsLoopback, originIsLoopback } from './loopback.ts'
+import { getUtc8DateString } from './checkin-scheduler.ts'
 import { QODER_STATUS_PATH } from './status-paths.ts'
 import type { QoderCatalogModelSnapshot, QoderPatSummary, QoderWebCatalog, QoderWebPlan, QoderWebProbeSection, QoderWebStatus } from './status-paths.ts'
 
@@ -88,6 +89,14 @@ export interface QoderStatusRouteOptions {
       expiresAtMs?: number | undefined
     }[] | undefined
   } | undefined
+  /**
+   * Today's date in UTC+8, `YYYY-MM-DD`.
+   *
+   * Read per request rather than captured once: a host that stays up across
+   * midnight UTC+8 must report the new day, or the card would keep calling
+   * yesterday settled for the rest of the process's life.
+   */
+  today?: () => string
   /**
    * Route path to mount. Defaults to the China variant's path so callers that
    * only serve it keep their behaviour; the global variant passes its own.
@@ -242,9 +251,31 @@ export async function qoderWebStatus(deps: QoderStatusRouteOptions): Promise<Qod
     ? probed
     : { ...probed, jobTokenRefreshedAt: refreshedAt }
   const checkInRecord = deps.checkIn?.()
+  /*
+   * `today` is stamped here, host-side, and never taken from the card.
+   *
+   * The card's job is to decide whether the record describes TODAY; doing that
+   * with the browser's clock would read the wrong day for every user outside
+   * UTC+8. The record only rides the document when there IS one, but `today`
+   * must travel with it either way — a variant that has never checked in has
+   * no record and needs no date, while a record without a date to compare
+   * against is precisely the state that produced a permanently disabled
+   * 「今日已签到」 button.
+   *
+   * The fallback keeps the field total for callers (tests, headless hosts)
+   * that pass a record without the date dependency: `undefined` must never
+   * reach the card, because a missing `today` makes `lastDate === today`
+   * false and would silently re-enable a claim the upstream already granted.
+   */
   const withCheckIn: QoderWebStatus = checkInRecord === undefined
     ? withRefreshNotice
-    : { ...withRefreshNotice, checkIn: checkInRecord }
+    : {
+      ...withRefreshNotice,
+      checkIn: {
+        ...checkInRecord,
+        today: deps.today?.() ?? getUtc8DateString(),
+      },
+    }
   try {
     const credits = await deps.client.fetchCredits()
     // `unlimited` and `cycleResetTime` ride along as-is: the card must see

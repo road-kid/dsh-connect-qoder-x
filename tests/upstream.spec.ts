@@ -798,7 +798,11 @@ describe('probeEffort', () => {
 
 describe('validateApiKey', () => {
   it('answers false for a blank token without building a transport', async () => {
-    await expect(validateApiKey('   ', 'china')).resolves.toBe(false)
+    await expect(validateApiKey('   ', 'china')).resolves.toEqual({
+      ok: false,
+      error: 'invalid',
+      reason: 'the token is empty',
+    })
     expect(createTransportMock).not.toHaveBeenCalled()
   })
 
@@ -808,18 +812,70 @@ describe('validateApiKey', () => {
       discoverModels: async (signal?: AbortSignal) => { void signal; return [] },
       readAccount: async () => { throw new Error('not used') },
     })
-    await expect(validateApiKey('pt-good', 'global')).resolves.toBe(true)
+    await expect(validateApiKey('pt-good', 'global')).resolves.toEqual({ ok: true })
     const built = createTransportMock.mock.calls[0]![0] as { region: string; resolvePat: () => Promise<string> }
     expect(built.region).toBe('global')
     expect(await built.resolvePat()).toBe('pt-good')
   })
 
-  it('refuses a token whose discovery call fails — any failure', async () => {
+  it('reports a REFUSED token as invalid', async () => {
     createTransportMock.mockReturnValue({
       stream: () => { throw new Error('nope') },
       discoverModels: async () => { throw new QoderLlmError('bad pat', 'AUTH', { status: 401 }) },
       readAccount: async () => { throw new Error('nope') },
     })
-    await expect(validateApiKey('pt-bad', 'china')).resolves.toBe(false)
+    const result = await validateApiKey('pt-bad', 'china')
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ error: 'invalid' })
+  })
+
+  it('does NOT call a timeout an invalid token', async () => {
+    /*
+     * The distinction this whole return type exists for. A timeout says
+     * nothing about the token, and reporting it as `invalid` sent users hunting
+     * for a replacement PAT whenever a cold start was slow — the reported
+     * symptom, where a fresh PAT appeared to be rejected until a later attempt
+     * happened to land on a warm connection.
+     */
+    createTransportMock.mockReturnValue({
+      stream: () => { throw new Error('nope') },
+      discoverModels: async () => { throw new QoderLlmError('Qoder model discovery timed out.', 'TIMEOUT') },
+      readAccount: async () => { throw new Error('nope') },
+    })
+    const result = await validateApiKey('pt-good-but-slow', 'global')
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ error: 'unreachable' })
+  })
+
+  it('does NOT call a transport failure an invalid token', async () => {
+    createTransportMock.mockReturnValue({
+      stream: () => { throw new Error('nope') },
+      discoverModels: async () => { throw new QoderLlmError('network request failed', 'TRANSPORT') },
+      readAccount: async () => { throw new Error('nope') },
+    })
+    const result = await validateApiKey('pt-x', 'global')
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ error: 'unreachable' })
+  })
+
+  it('does NOT call a server 5xx an invalid token', async () => {
+    createTransportMock.mockReturnValue({
+      stream: () => { throw new Error('nope') },
+      discoverModels: async () => { throw new QoderLlmError('upstream exploded', 'SERVER', { status: 503 }) },
+      readAccount: async () => { throw new Error('nope') },
+    })
+    const result = await validateApiKey('pt-x', 'global')
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ error: 'unreachable' })
+  })
+
+  it('treats a 403 as a refusal, since the gateway answers 403 for a bad token', async () => {
+    createTransportMock.mockReturnValue({
+      stream: () => { throw new Error('nope') },
+      discoverModels: async () => { throw new QoderLlmError('forbidden', 'FORBIDDEN', { status: 403 }) },
+      readAccount: async () => { throw new Error('nope') },
+    })
+    const result = await validateApiKey('pt-x', 'global')
+    expect(result).toMatchObject({ error: 'invalid' })
   })
 })
