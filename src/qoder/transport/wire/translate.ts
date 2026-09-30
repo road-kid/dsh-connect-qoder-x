@@ -1,6 +1,7 @@
 /** Translate provider-neutral DSH messages and tools into Qoder wire values. */
 
-import type { ContentBlock, ImageBlock, Message, ToolResultBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ImageBlock, RequestMessage, ToolResultMessage, ToolSchema } from '@deepseek-ai/dsh-llm'
+import { requestImageDimensions } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { QoderLlmError } from '../../errors.ts'
 import type { CosyCredentials } from './cosy.ts'
@@ -34,9 +35,16 @@ function unsupported(message: string): QoderLlmError {
   return new QoderLlmError(message, 'UNSUPPORTED_CONTENT')
 }
 
-function toolResultText(block: ToolResultBlock): string {
+/**
+ * Join the text blocks of one tool-role message.
+ *
+ * In DSH 0.1.7 a tool result is a first-class `role: 'tool'` message that
+ * answers one call by id, so the blocks live on the message itself rather
+ * than nested inside a `tool-result` content block.
+ */
+function toolResultText(message: ToolResultMessage): string {
   let text = ''
-  for (const nested of block.content) {
+  for (const nested of message.content) {
     if (nested.type === 'image') continue
     if (nested.type !== 'text') {
       throw unsupported(`Qoder tool results support text only; received nested ${String(nested.type)} content.`)
@@ -52,15 +60,18 @@ function toolResultText(block: ToolResultBlock): string {
  * Callers run this before resolving credentials so an invalid request never
  * consumes a Qoder subscription.
  */
-export function validateMessageShapes(messages: readonly Message[]): void {
+export function validateMessageShapes(messages: readonly RequestMessage[]): void {
   for (const message of messages) {
-    const toolResults = message.content.filter((block): block is ToolResultBlock => block.type === 'tool-result')
-    if (toolResults.length > 0) {
-      if (message.role !== 'user' || toolResults.length !== message.content.length) {
-        throw unsupported('Qoder tool-result messages cannot contain sibling content or use a non-user role.')
-      }
-      for (const result of toolResults) toolResultText(result)
+    // Tool results answer a call by id and carry no sibling content by
+    // construction in 0.1.7, so the old "one block, user role" check is gone.
+    if (message.role === 'tool') {
+      toolResultText(message)
       continue
+    }
+    // A developer turn only ever carries tool-addition/tool-removal blocks,
+    // which the Qoder wire cannot express.
+    if (message.role === 'developer') {
+      throw unsupported('Qoder transport does not support developer-role messages.')
     }
 
     for (const block of message.content) {
@@ -112,8 +123,11 @@ async function resolveImagePart(
   let image: RequestImageAttachment
   try {
     const limits = attachments.imageLimits
+    // 0.1.7 replaced the `maxPixels` policy with an explicit target box: the
+    // caller derives the request dimensions itself and states the byte cap
+    // alongside them. The attachment ref already carries the intrinsic size.
     image = await attachments.readImageRequest(block.attachment, {
-      maxPixels: limits.maxImagePixels,
+      ...requestImageDimensions(block.attachment.width, block.attachment.height, limits.maxImagePixels),
       maxBytes: limits.maxImageBytes,
     }, signal)
   } catch (error) {
@@ -146,7 +160,7 @@ export function translateTools(tools: readonly ToolSchema[] | undefined): QoderW
 }
 
 export async function validateAndTranslateMessages(
-  messages: readonly Message[],
+  messages: readonly RequestMessage[],
   systemPrompt?: string,
   attachments?: QoderImageAttachments,
   signal?: AbortSignal,
@@ -167,33 +181,32 @@ export async function validateAndTranslateMessages(
   }
 
   for (const message of messages) {
-    const toolResults = message.content.filter((block): block is ToolResultBlock => block.type === 'tool-result')
-    if (toolResults.length > 0) {
-      if (message.role !== 'user' || toolResults.length !== message.content.length) {
-        throw unsupported('Qoder tool-result messages cannot contain sibling content or use a non-user role.')
-      }
-      for (const result of toolResults) {
+    if (message.role === 'tool') {
+      output.push({
+        role: 'tool',
+        tool_call_id: String(message.toolCallId),
+        content: toolResultText(message),
+      })
+      const images = message.content.filter((block): block is ImageBlock => block.type === 'image')
+      if (images.length > 0) {
+        if (attachments !== undefined) enforceImageLimits(images, attachments)
         output.push({
-          role: 'tool',
-          tool_call_id: String(result.toolCallId),
-          content: toolResultText(result),
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `[${images.length} image${images.length === 1 ? '' : 's'} returned by the previous tool call]`,
+            },
+            ...await Promise.all(images.map(image => resolveImagePart(image, context))),
+          ],
         })
-        const images = result.content.filter((block): block is ImageBlock => block.type === 'image')
-        if (images.length > 0) {
-          if (attachments !== undefined) enforceImageLimits(images, attachments)
-          output.push({
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `[${images.length} image${images.length === 1 ? '' : 's'} returned by the previous tool call]`,
-              },
-              ...await Promise.all(images.map(image => resolveImagePart(image, context))),
-            ],
-          })
-        }
       }
       continue
+    }
+    if (message.role === 'developer') {
+      // Already rejected by validateMessageShapes; the narrowing keeps the
+      // remaining roles explicit for the wire's own role union.
+      throw unsupported('Qoder transport does not support developer-role messages.')
     }
 
     let text = ''
