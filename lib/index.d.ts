@@ -2,10 +2,10 @@ import z from "@deepseek-ai/schemastery";
 import "@earendil-works/pi-ai";
 import { GenerateOptions, StreamChunk } from "@deepseek-ai/dsh-llm";
 import { PiAiAdapter } from "@deepseek-ai/dsh-llm-pi-ai";
+import { AttachmentStore } from "@deepseek-ai/dsh-attachment";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Context } from "@deepseek-ai/cordis";
 import { SettingsNamespace } from "@deepseek-ai/dsh-settings";
-import { AttachmentStore } from "@deepseek-ai/dsh-attachment";
 //#region src/paths.d.ts
 /**
  * The plugin's data directory — the ONE place every file the plugin owns
@@ -111,6 +111,29 @@ interface QoderPatSummary {
   patTail?: string;
   /** The subscriber name the credential belongs to, when the upstream reported one. */
   accountName?: string;
+}
+/**
+ * The subscriber's coding plan, as the card displays it.
+ *
+ * The upstream's `/api/v2/user/plan` answer is fetched on every account read
+ * but had no consumer: the card could show how many credits were left without
+ * ever naming the plan those credits belong to, so a paid seat looked exactly
+ * like a free one. This is the browser-safe projection of that answer — only
+ * the facts the card renders, with the raw payload and the organization's
+ * management flags left behind on the host side.
+ *
+ * Only `planTierName` is required. The upstream omits dates and organization
+ * for personal seats, and a plan the upstream did not describe is absent
+ * entirely rather than invented; renderers show what is present and omit the
+ * rest instead of guessing a tier or a date.
+ */
+interface QoderWebPlan {
+  /** The plan's display name, e.g. "Pro". */
+  planTierName: string;
+  /** The organization the seat belongs to, when it is not a personal one. */
+  organizationName?: string;
+  /** When the current plan term ends, verbatim from the upstream. */
+  endDate?: string;
 }
 /** One model's recorded probe observation, as the card displays it. */
 interface QoderWebProbeModel {
@@ -242,6 +265,13 @@ type QoderWebStatus = {
   region?: QoderRegion;
   /** Redacted summary of the PAT in effect. */
   pat?: QoderPatSummary;
+  /**
+   * The subscriber's coding plan, when the upstream described one.
+   *
+   * Absent for an account whose plan read failed or reported nothing —
+   * renderers omit the line rather than guess a tier.
+   */
+  plan?: QoderWebPlan;
   credits?: QoderWebCredits;
   creditsError?: string;
   /** The models the plugin serves, as catalog snapshots. */
@@ -681,7 +711,6 @@ interface QoderCatalogModel {
 }
 //#endregion
 //#region src/qoder/account.d.ts
-/** Browser-safe Qoder subscriber account and quota types. */
 interface QoderSubscriberProfile {
   id: string;
   name: string;
@@ -905,6 +934,16 @@ declare class QoderUpstreamClient {
    * without a second upstream request.
    */
   accountName: string | undefined;
+  /**
+   * The subscriber's coding plan from the same account read.
+   *
+   * `readAccount` already fetches `/api/v2/user/plan` on every call — the
+   * answer was parsed and then dropped, so the card could show the credits a
+   * plan grants without ever naming the plan. Cached here beside
+   * {@link accountName} for the same reason: the status document needs it
+   * without a second upstream request.
+   */
+  accountPlan: QoderSubscriberPlan | undefined;
   constructor(options: QoderUpstreamClientOptions);
   /** The region this client's transport serves. */
   get clientRegion(): QoderRegion;
