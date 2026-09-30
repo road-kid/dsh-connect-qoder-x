@@ -563,15 +563,18 @@ describe('Unified Qoder Plugin Card', () => {
     // 自己表达(灰掉 + 「今日已签到」),不再用文字复述。
     expect(view!.root.findAll(n => n.children.includes('+100 Credits'))).toHaveLength(0)
 
-    // 需求(m01317 第 3 条):旧的日志展开/刷新/清空整套按钮已经删掉,改用
+    // 需求(m01317 第 3 条):旧的日志展开/刷新/清空三件套按钮已经删掉,改用
     // 与「可用额度」并排的领取台账。
     const ledgerHeading = view!.root.findAll(n => n.children.includes(en.ledgerHeading))
     expect(ledgerHeading.length).toBeGreaterThanOrEqual(1)
-    // 旧三件套一个都不能再出现(日志展开、清空日志)。注意不能拿
-    // checkInRefresh 当探针:它的英文就是 "Refresh",与账号框自己那个刷新
-    // 按钮(以及设置里的「刷新模型列表」)同字,断言必然误伤。
+    // 旧日志表格的「展开」按钮不能再出现。注意不能拿 checkInRefresh 当探针:
+    // 它的英文就是 "Refresh",与账号框自己那个刷新按钮(以及设置里的
+    // 「刷新模型列表」)同字,断言必然误伤。
     expect(view!.root.findAll(n => n.children.includes(en.checkInLogShow))).toHaveLength(0)
-    expect(view!.root.findAll(n => n.children.includes(en.checkInClear))).toHaveLength(0)
+    // 「清空日志」是保留的:上一轮改版把它从日志表格搬到台账标题行时漏掉了,
+    // 清空动作因此一度无处可点(见 clearCheckInLogs 的接线)。它在台账的
+    // 标题行里,与表头同一层,不在旧三件套里。
+    expect(view!.root.findAll(n => n.children.includes(en.checkInClear)).length).toBeGreaterThanOrEqual(1)
     // 需求(m02274 第 1 条):7/30 天窗口切换已删,台账不再按时间窗过滤,
     // 界面能显示几条就显示几条。这条 fixture 的 timestamp 是 2023-11-15,
     // 旧版会把它过滤掉并给出空态;现在这笔领取直接列出,「+100」就在行上。

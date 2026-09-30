@@ -347,7 +347,7 @@ function formatRate(factor: number): string {
  * 是签到状态与动作(立即签到 / 刷新 / 展开日志 / 清除),签到状态直接印在
  * 行内。workbuddy credit-panel 的结构,按本插件的信息密度重排。
  */
-function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, checkInNotice, autoCheckIn, onCheckIn }: {
+function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn, checkInNotice, autoCheckIn, onCheckIn, clearingLogs, logsDisabled, onClearLogs }: {
   credits?: QoderWebCredits | undefined
   creditsError?: string | undefined
   checkIn?: Extract<QoderWebStatus, { status: 'signed-in' }>['checkIn'] | undefined
@@ -364,6 +364,11 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
    */
   autoCheckIn?: boolean
   onCheckIn: () => void
+  /** A clear-logs request is in flight. */
+  clearingLogs?: boolean | undefined
+  /** No usable credential, so the ledger's clear action cannot run. */
+  logsDisabled?: boolean | undefined
+  onClearLogs?: (() => void) | undefined
 }): React.ReactNode {
   /** Today's claim already happened (the upstream said so, or the log does). */
   const claimedToday = checkIn !== undefined && checkIn.status === 'claimed'
@@ -382,7 +387,13 @@ function UsageCheckInPanel({ credits, creditsError, checkIn, t, busy, checkingIn
        * 窄屏由 .qdp-twoUp 的断点回落到单列。
        */}
       <div className="qdp-twoUp">
-        <CheckInLedger logs={checkIn?.logs} t={t} />
+        <CheckInLedger
+          logs={checkIn?.logs}
+          t={t}
+          {...clearingLogs === undefined ? {} : { clearing: clearingLogs }}
+          {...logsDisabled === undefined ? {} : { disabled: logsDisabled }}
+          {...onClearLogs === undefined ? {} : { onClear: onClearLogs }}
+        />
         <div className="qdp-panel">
           <div className="qdp-panelHead">
             <h3 className="qdp-panelTitle">{t('creditsHeading')}</h3>
@@ -470,7 +481,7 @@ const SOON_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
  * 因此按「领取时间」倒序列出,并在每行右侧给出该笔的到期日;上游没给有效期
  * 的笔(手动签到)按领取后 30 天补算,不再显示「有效期未知」。
  */
-function CheckInLedger({ logs, t }: {
+function CheckInLedger({ logs, t, clearing, disabled, onClear }: {
   logs: readonly {
     id: string
     date: string
@@ -480,6 +491,11 @@ function CheckInLedger({ logs, t }: {
     expiresAtMs?: number | undefined
   }[] | undefined
   t: QoderPluginCardInjected['t']
+  /** A clear request is in flight; the button reads 「正在清空…」. */
+  clearing?: boolean | undefined
+  /** No usable credential, so the action cannot run. */
+  disabled?: boolean | undefined
+  onClear?: (() => void) | undefined
 }): React.ReactNode {
   const now = Date.now()
   /*
@@ -516,6 +532,19 @@ function CheckInLedger({ logs, t }: {
     <div className="qdp-panel">
       <div className="qdp-panelHead">
         <h3 className="qdp-panelTitle">{t('ledgerHeading')}</h3>
+        {onClear === undefined ? null : (
+          /* 清空日志 lives on its own panel head: the ledger rewrite dropped the
+             control that used to sit beside the log table, leaving the
+             clear-checkin-logs action with no way to reach it. */
+          <button
+            type="button"
+            className="qdp-btn qdp-btnDangerQuiet"
+            disabled={disabled === true || clearing === true}
+            onClick={onClear}
+          >
+            {clearing === true ? t('checkInClearing') : t('checkInClear')}
+          </button>
+        )}
       </div>
       {claimed.length === 0 ? (
         <p className="qdp-panelMeta">{t('ledgerEmpty')}</p>
@@ -1586,6 +1615,9 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                   checkingIn={checkingIn}
                   checkInNotice={checkInNotice}
                   onCheckIn={() => { void manualCheckIn() }}
+                  clearingLogs={clearingLogs}
+                  logsDisabled={status.status !== 'signed-in'}
+                  onClearLogs={() => { void clearCheckInLogs() }}
                 />
                 {/*
                  * 「用量与签到 | 模型」双栏:用量面板已上移到 tab 之外(打开
