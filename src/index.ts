@@ -31,7 +31,8 @@ import { getMachineId } from './qoder/transport/machine-id.ts'
 import { qoderMachineIdPath } from './paths.ts'
 import { registerQoderStatusRoute } from './web-status.ts'
 import { createProbeKey, registerQoderProbeRoute } from './probe-route.ts'
-import { CheckInScheduler, DEFAULT_CHECK_IN_MINUTE, JsonFileCheckInStore, getUtc8DateString, normalizeCheckInMinute } from './checkin-scheduler.ts'
+import { CheckInScheduler, DEFAULT_CHECK_IN_MINUTE, JsonFileCheckInStore, normalizeCheckInMinute } from './checkin-scheduler.ts'
+import { getClaimWindowDateString } from './claim-window.ts'
 import type { QoderModelInfo } from './catalog.ts'
 import type { QoderWebCatalog, QoderWebProbeSection } from './status-paths.ts'
 import { QODER_SETTINGS_FACE_PATH } from './status-paths.ts'
@@ -1421,20 +1422,31 @@ export function apply(ctx: Context, config: Config): void {
   ))
 
   const checkInStore = new JsonFileCheckInStore()
+  /**
+   * When one variant's daily claim window opens, in minutes past midnight UTC+8.
+   *
+   * One definition, used by both the scheduler's timer and the status route's
+   * `today` stamp. They must agree: the scheduler decides whether a window was
+   * already claimed using this moment, and the card decides whether to offer
+   * the button using the same notion of "now" — if the two drifted, the card
+   * could offer an action the sweep considered done, or hide one it considered
+   * due.
+   *
+   * A missing or out-of-range stored value must never leave a variant
+   * unscheduled, so it falls back to the documented default rather than to
+   * "now" or to an instant that never comes.
+   */
+  const variantWindowMinute = (variantId: string): number => {
+    const cfg = current()
+    const stored = variantId === CHINA_VARIANT.id ? cfg.checkInMinuteCN : cfg.checkInMinuteGlobal
+    return normalizeCheckInMinute(stored ?? DEFAULT_CHECK_IN_MINUTE)
+  }
+
   const checkInScheduler = new CheckInScheduler({
     targets: runtimes.map(runtime => ({
       variantId: runtime.variant.id,
       checkIn: (signal?: AbortSignal) => runtime.checkIn(signal),
-      minuteOfDay: () => {
-        const cfg = current()
-        const stored = runtime.variant.id === CHINA_VARIANT.id
-          ? cfg.checkInMinuteCN
-          : cfg.checkInMinuteGlobal
-        // A missing or out-of-range stored value must never leave a variant
-        // unscheduled, so it falls back to the documented default rather than
-        // to "now" or to an instant that never comes.
-        return normalizeCheckInMinute(stored ?? DEFAULT_CHECK_IN_MINUTE)
-      },
+      minuteOfDay: () => variantWindowMinute(runtime.variant.id),
       onClaimed: () => {
         void runtime.client.fetchCredits().catch(() => undefined)
       },
@@ -1616,11 +1628,23 @@ export function apply(ctx: Context, config: Config): void {
             ...nextRunAt === undefined ? {} : { nextRunAt },
           }
         },
-        // The card decides whether the record describes TODAY, and it must do
-        // so against the plugin's own UTC+8 day rather than the browser's
-        // clock. Called per request, so a host left running past midnight
-        // UTC+8 reports the new day instead of pinning yesterday's answer.
-        today: () => getUtc8DateString(),
+        /*
+         * The card asks whether the record describes the claim window that is
+         * open RIGHT NOW, and it must not answer that with the browser's clock
+         * or with the calendar date.
+         *
+         * Calendar date was the bug: the upstream's window opens at 10:00
+         * UTC+8 and closes at 10:00 the next morning, so a benefit claimed at
+         * 23:11 belongs to a window that is still running at 00:44 — yet the
+         * calendar had rolled over, the comparison failed, and the card
+         * offered 「立即领取」 for a benefit already granted.
+         *
+         * Computed per request, so a host left running across the 10:00
+         * boundary starts reporting the next window without a restart. The
+         * minute is the variant's own configured moment, the same one the
+         * scheduler fires on, so the two halves cannot drift apart.
+         */
+        today: () => getClaimWindowDateString(Date.now(), variantWindowMinute(runtime.variant.id)),
       })
       registerQoderAuthRoute(webCtx, {
         path: runtime.variant.authPath,
@@ -1717,14 +1741,19 @@ export function apply(ctx: Context, config: Config): void {
              * the record itself is what the card reads, so the honest move is
              * to keep the original settlement and report the fresh answer.
              */
+            // The window this click landed in, from the variant's own
+            // configured moment — the same label the scheduler and the card
+            // use. Taking `result.date` instead would let a retimed window's
+            // record and its guard disagree.
+            const window = getClaimWindowDateString(Date.now(), variantWindowMinute(runtime.variant.id))
             const settled = (() => {
               const record = checkInStore.read(runtime.variant.id)
-              return record?.lastDate === result.date
+              return record?.lastDate === window
                 && (record.status === 'claimed' || record.status === 'already-claimed')
             })()
             if (!settled) {
               checkInStore.write(runtime.variant.id, {
-                lastDate: result.date,
+                lastDate: window,
                 lastAt: result.timestamp,
                 status: result.status,
                 ...result.amount === undefined ? {} : { amount: result.amount },

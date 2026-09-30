@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { QoderCheckInResult } from './qoder/transport/checkin.ts'
 import { qoderPluginDataDir } from './paths.ts'
+import { getClaimWindowDateString } from './claim-window.ts'
 
 export interface VariantCheckInTarget {
   variantId: string
@@ -160,6 +161,15 @@ export function getUtc8DateString(nowMs: number = Date.now()): string {
   const day = String(utc8.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+/**
+ * Which daily CLAIM WINDOW an instant belongs to, as `YYYY-MM-DD` in UTC+8.
+ *
+ * Re-exported from the shared module so callers that already depend on the
+ * scheduler keep one import; see `claim-window.ts` for why the window is not
+ * the calendar day.
+ */
+export { getClaimWindowDateString } from './claim-window.ts'
 
 /**
  * The moment a variant checks in, as minutes past midnight in UTC+8.
@@ -348,11 +358,23 @@ export class CheckInScheduler {
     today: string,
   ): Promise<void> {
     const record = this.store.read(target.variantId)
-    // Only an actually claimed day is settled. A day whose attempt ended in
-    // "no campaign" (the upstream had not released it yet) or in an error
-    // must stay retryable, otherwise one early failure burns the whole day —
-    // which is exactly what a wrong client identifier used to do.
-    const settledToday = record?.lastDate === today
+    /*
+     * Only an actually claimed WINDOW is settled — and it is the window, not
+     * the calendar day, that must be compared.
+     *
+     * The upstream's window opens at this variant's configured moment (10:00
+     * by default) and runs until the same moment the next day, so between
+     * midnight and 10:00 a claimed window still has hours left to run. A
+     * calendar-day comparison called that window unclaimed and sent a second
+     * request the upstream could only refuse — observed as the card offering
+     * "立即领取" again at 00:44 for a benefit claimed at 23:11.
+     *
+     * A window whose attempt ended in "no campaign" (the upstream had not
+     * released it yet) or in an error must stay retryable, otherwise one early
+     * failure burns the whole window.
+     */
+    const currentWindow = getClaimWindowDateString(nowMs, target.minuteOfDay())
+    const settledToday = record?.lastDate === currentWindow
       && (record.status === 'claimed' || record.status === 'already-claimed')
     if (settledToday) {
       // A scheduled run that finds the day already handled still leaves a row.
@@ -361,11 +383,14 @@ export class CheckInScheduler {
       // exactly how a user concludes the scheduler is broken.
       if (!isCatchUp) {
         this.store.write(target.variantId, {
-          lastDate: today,
+          // The WINDOW, not the calendar day: this row is what the next
+          // settle check compares against, so writing a different notion
+          // here would make the record disagree with its own guard.
+          lastDate: currentWindow,
           lastAt: nowMs,
           status: 'already-claimed',
           ...record.amount === undefined ? {} : { amount: record.amount },
-          message: 'Scheduled check-in ran; today was already claimed',
+          message: 'Scheduled check-in ran; this window was already claimed',
         })
       }
       return
@@ -384,8 +409,18 @@ export class CheckInScheduler {
     }
     try {
       if (result.status !== 'error') {
+        /*
+         * The WINDOW label is stamped from this sweep's own configured moment
+         * rather than taken from `result.date`.
+         *
+         * The transport does not know the user's configured window (it is
+         * built once, while the window minute is read per sweep), so it labels
+         * a claim with the documented default. Storing that would let the
+         * record and the guard above disagree whenever a user retimes the
+         * window, which is the same mismatch this change exists to remove.
+         */
         this.store.write(target.variantId, {
-          lastDate: result.date,
+          lastDate: currentWindow,
           lastAt: result.timestamp,
           status: result.status,
           amount: result.amount,

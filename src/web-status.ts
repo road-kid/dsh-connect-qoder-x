@@ -16,7 +16,7 @@ import type { QoderSubscriberPlan } from './qoder/account.ts'
 import { normalizeCredits } from './upstream.ts'
 import type { QoderModelInfo } from './catalog.ts'
 import { hostIsLoopback, originIsLoopback } from './loopback.ts'
-import { getUtc8DateString } from './checkin-scheduler.ts'
+import { getClaimWindowDateString } from './claim-window.ts'
 import { QODER_STATUS_PATH } from './status-paths.ts'
 import type { QoderCatalogModelSnapshot, QoderPatSummary, QoderWebCatalog, QoderWebPlan, QoderWebProbeSection, QoderWebStatus } from './status-paths.ts'
 
@@ -273,7 +273,7 @@ export async function qoderWebStatus(deps: QoderStatusRouteOptions): Promise<Qod
       ...withRefreshNotice,
       checkIn: {
         ...checkInRecord,
-        today: deps.today?.() ?? getUtc8DateString(),
+        today: deps.today?.() ?? getClaimWindowDateString(),
       },
     }
   try {

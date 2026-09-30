@@ -12,6 +12,7 @@ import type { QoderLogger } from './logging.ts'
 import { openApiJsonRequest } from './request.ts'
 import { qoderDesktopClientType } from './wire/cosy.ts'
 import { resolveRiskIdentity, type QoderRiskIdentity } from './risk-identity.ts'
+import { getClaimWindowDateString, DEFAULT_CLAIM_WINDOW_MINUTE } from '../../claim-window.ts'
 
 export interface QoderCampaignBenefit {
   kind?: string
@@ -91,6 +92,14 @@ export interface QoderCheckInServiceOptions {
    * Qoder client is installed, which no test environment can rely on.
    */
   riskIdentity?: ((region: QoderRegion, uid: string) => Promise<QoderRiskIdentity | undefined>) | undefined
+  /**
+   * When the daily claim window opens, in minutes past midnight UTC+8.
+   *
+   * The window runs from this moment until the same moment the next day, so it
+   * decides which window an instant belongs to. The scheduler owns the user's
+   * configured value; this default matches the documented 10:00 opening.
+   */
+  windowMinute?: number | undefined
 }
 
 const defaultCheckInTimeoutMs = 15_000
@@ -146,6 +155,7 @@ export class QoderCheckInService {
   private readonly logger: QoderLogger | undefined
   private readonly timeoutMs: number
   private readonly riskIdentity: (region: QoderRegion, uid: string) => Promise<QoderRiskIdentity | undefined>
+  private readonly windowMinute: number
 
   constructor(options: QoderCheckInServiceOptions) {
     this.authService = options.authService
@@ -155,6 +165,7 @@ export class QoderCheckInService {
     this.logger = options.logger
     this.timeoutMs = options.timeoutMs ?? defaultCheckInTimeoutMs
     this.riskIdentity = options.riskIdentity ?? resolveRiskIdentity
+    this.windowMinute = options.windowMinute ?? DEFAULT_CLAIM_WINDOW_MINUTE
   }
 
   async fetchCampaigns(token: string, signal?: AbortSignal, identity?: QoderRiskIdentity): Promise<QoderCampaign[]> {
@@ -190,14 +201,19 @@ export class QoderCheckInService {
     })
   }
 
-  private getTodayDateString(): string {
-    // Standardize date on UTC+8 (Beijing Time), which matches Qoder's 10:00 reset cycle
-    const now = new Date()
-    const utc8Time = new Date(now.getTime() + (now.getTimezoneOffset() + 480) * 60_000)
-    const y = utc8Time.getFullYear()
-    const m = String(utc8Time.getMonth() + 1).padStart(2, '0')
-    const d = String(utc8Time.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
+  /**
+   * Which daily claim window an instant belongs to, as `YYYY-MM-DD` in UTC+8.
+   *
+   * Deliberately NOT the calendar date. The upstream opens a window every day
+   * at 10:00 UTC+8 and closes it just before 10:00 the next morning, so the
+   * hours between midnight and 10:00 belong to the window that opened the
+   * previous day. Stamping a claim made at 23:11 with the calendar date of the
+   * following midnight made every date comparison disagree with the window the
+   * claim actually belonged to, which re-armed the claim button hours before a
+   * new benefit was available. The scheduler compares against the same rule.
+   */
+  private getTodayDateString(nowMs: number = Date.now()): string {
+    return getClaimWindowDateString(nowMs, this.windowMinute)
   }
 
   async checkIn(pat: string, signal?: AbortSignal): Promise<QoderCheckInResult> {

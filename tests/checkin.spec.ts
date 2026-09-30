@@ -420,6 +420,129 @@ describe('CheckInScheduler', () => {
     expect(checkIn).not.toHaveBeenCalled()
   })
 
+  it('stamps the record with the window it fired on, not the transport default', async () => {
+    /*
+     * The transport cannot know a user's retimed window (it is built once,
+     * while the minute is read per sweep), so it labels claims with the 10:00
+     * default. If the sweep stored that label, a 14:30 window would write
+     * "today" for a 12:00 claim while comparing against "yesterday" — the
+     * record and its own guard disagreeing, which is the bug being fixed.
+     */
+    const records: Record<string, CheckInRecord> = {}
+    const store: CheckInStatusStore = {
+      read: id => records[id],
+      write: (id, record) => { records[id] = record },
+      clearLogs: id => { if (records[id]) records[id].logs = [] },
+    }
+    const checkIn = vi.fn(async () => ({
+      variantId: 'qoder',
+      // The transport's own (default-window) label, which must NOT be stored.
+      date: '2026-09-30',
+      timestamp: 2,
+      status: 'claimed' as const,
+      amount: 100,
+    }))
+
+    const scheduler = new CheckInScheduler({
+      targets: [{ variantId: 'qoder', checkIn, minuteOfDay: () => 870 }],
+      isEnabled: () => true,
+      store,
+      // 12:00 UTC+8: before a 14:30 opening, so this belongs to Sep 29's window.
+      now: () => new Date('2026-09-30T04:00:00.000Z').getTime(),
+    })
+
+    await scheduler.sweepAll(false)
+    scheduler.dispose()
+
+    expect(records.qoder?.lastDate).toBe('2026-09-29')
+  })
+
+  it('treats a window claimed last night as settled after midnight', async () => {
+    /*
+     * The reported bug: the user claimed at 23:11 and the card offered the
+     * button again at 00:44, because "settled" was compared against the
+     * CALENDAR day. The upstream's window runs 10:00 -> 10:00, so the claim
+     * still belongs to the open window and a sweep must not re-claim it.
+     */
+    const records: Record<string, CheckInRecord> = {
+      // 23:11 on Sep 30 belongs to the window that opened at 10:00 that day.
+      qoder: { lastDate: '2026-09-30', lastAt: 1, status: 'claimed', amount: 100 },
+    }
+    const store: CheckInStatusStore = {
+      read: id => records[id],
+      write: (id, record) => { records[id] = record },
+      clearLogs: id => { if (records[id]) records[id].logs = [] },
+    }
+    const checkIn = vi.fn(async () => ({
+      variantId: 'qoder',
+      date: '2026-10-01',
+      timestamp: 2,
+      status: 'claimed' as const,
+      amount: 100,
+    }))
+
+    const scheduler = new CheckInScheduler({
+      targets: [{
+        variantId: 'qoder',
+        checkIn,
+        minuteOfDay: () => DEFAULT_CHECK_IN_MINUTE,
+      }],
+      isEnabled: () => true,
+      store,
+      // 00:44 UTC+8 on Oct 1: past midnight, but the 10:00 window is still open.
+      now: () => new Date('2026-09-30T16:44:00.000Z').getTime(),
+    })
+
+    /*
+     * `sweepAll` directly, not `start()`: a STARTUP catch-up returns early
+     * before the settle check whenever the configured moment has not passed,
+     * so it would pass here for the wrong reason. The scheduled (non-catch-up)
+     * sweep is the path that consults the record.
+     */
+    await scheduler.sweepAll(false)
+    scheduler.dispose()
+
+    expect(checkIn).not.toHaveBeenCalled()
+  })
+
+  it('claims again once the next window has actually opened', async () => {
+    // The mirror of the case above: at 10:00 the window really does turn over,
+    // so the same record must no longer be treated as settled.
+    const records: Record<string, CheckInRecord> = {
+      qoder: { lastDate: '2026-09-30', lastAt: 1, status: 'claimed', amount: 100 },
+    }
+    const store: CheckInStatusStore = {
+      read: id => records[id],
+      write: (id, record) => { records[id] = record },
+      clearLogs: id => { if (records[id]) records[id].logs = [] },
+    }
+    const checkIn = vi.fn(async () => ({
+      variantId: 'qoder',
+      date: '2026-10-01',
+      timestamp: 2,
+      status: 'claimed' as const,
+      amount: 100,
+    }))
+
+    const scheduler = new CheckInScheduler({
+      targets: [{
+        variantId: 'qoder',
+        checkIn,
+        minuteOfDay: () => DEFAULT_CHECK_IN_MINUTE,
+      }],
+      isEnabled: () => true,
+      store,
+      // 10:00 UTC+8 on Oct 1 (02:00 UTC): the new window is open.
+      now: () => new Date('2026-10-01T02:00:00.000Z').getTime(),
+    })
+
+    scheduler.start()
+    await new Promise(r => setTimeout(r, 10))
+    scheduler.dispose()
+
+    expect(checkIn).toHaveBeenCalled()
+  })
+
   it('never sweeps one variant twice at once', async () => {
     let settle: ((result: QoderCheckInResult) => void) | undefined
     const checkIn = vi.fn(() => new Promise<QoderCheckInResult>(resolve => { settle = resolve }))
