@@ -80,7 +80,6 @@ export const QUOTA_CSS = `
 /* The ring glyph. Sized entirely by its own width/height attribute, so the
    footer row and the rail button can each ask for their own. */
 .qdp-glyph{flex:none;justify-content:center;align-items:center;display:inline-flex;color:var(--dsw-alias-brand-primary)}
-.qdp-ringWarn{color:var(--dsw-alias-state-error-primary)}
 
 /* Pure-CSS caret for the card's collapsible sections. The host primitives'
    chevron icon names differ per DSH line, so no static import can serve both —
@@ -115,23 +114,30 @@ export const QUOTA_CSS = `
 .qdp-notice{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;padding:12px 14px;flex-direction:column;gap:4px;display:flex}
 .qdp-noticeError{border-color:var(--dsw-alias-state-error-primary)}
 .qdp-noticeTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5}
-.qdp-noticeHint{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.55}
 
-/* One card per variant. */
-.qdp-card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:14px;padding:16px 18px;flex-direction:column;gap:16px;display:flex}
-.qdp-cardHead{align-items:center;gap:10px;display:flex;flex-wrap:wrap}
+/* One card per variant. The dashboard's OWN names: the plugin card further
+   down used to share qdp-card/qdp-cardHead/qdp-cardTitle with this block, and
+   being later in the sheet it silently overrode them — which is how the plugin
+   card's border-width:.5px; border-radius:16px leaked onto the dashboard. The
+   plugin card keeps those three names (its consumers and the specs pin them);
+   this surface is renamed instead.
+
+   The declarations below are exactly what the cascade had ALREADY resolved to
+   for the dashboard, with the plugin card's later contributions folded in:
+   list-style, border-width, border-style, border-color, border-radius and
+   transition from its rule, plus its :hover tone (restated below), while every
+   declaration that survived from this block is unchanged. Rendered result is
+   identical for both surfaces. (No backticks in these comments: the sheet is a
+   template literal.) */
+.qdp-dashCard{list-style:none;border-width:.5px;border-style:solid;border-color:var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-3);transition:border-color .16s,background .16s;padding:16px 18px;flex-direction:column;gap:16px;display:flex}
+.qdp-dashCard:hover{border-color:var(--dsw-alias-label-dimmed)}
+.qdp-dashCardHead{flex-wrap:wrap;flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0;display:flex}
 .qdp-avatar{flex:none;width:28px;height:28px;color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-module-platform);border-radius:50%;justify-content:center;align-items:center;font-size:12px;font-weight:600;line-height:1;display:inline-flex}
 .qdp-cardIdentity{flex-direction:column;gap:1px;min-width:0;display:flex}
-.qdp-cardTitle{font-size:13px;font-weight:600;line-height:1.4}
+.qdp-dashCardTitle{font-size:15px;line-height:1.4;font-weight:600;color:var(--dsw-alias-label-primary);text-align:left}
 .qdp-cardOwner{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 
 /* Quota blocks: each merged group is a label row plus the track. */
-.qdp-windows{flex-direction:column;gap:14px;display:flex}
-.qdp-window{flex-direction:column;gap:6px;display:flex}
-.qdp-windowHead{align-items:baseline;gap:8px;display:flex}
-.qdp-windowLabel{color:var(--dsw-alias-label-secondary);font-size:12px;font-weight:500;line-height:1.5}
-.qdp-windowValue{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums;white-space:nowrap}
-.qdp-windowPct{color:var(--dsw-alias-label-primary);min-width:38px;text-align:right;font-size:12px;font-weight:600;line-height:1.5;font-variant-numeric:tabular-nums}
 .qdp-bar{overflow:hidden;background:var(--dsw-alias-bg-layer-1);border-radius:999px;height:8px}
 .qdp-barFill{background:var(--dsw-alias-brand-primary);border-radius:999px;height:100%;transition:width .3s ease}
 .qdp-barFillWarn{background:var(--dsw-alias-state-error-primary)}
@@ -139,13 +145,16 @@ export const QUOTA_CSS = `
 
 /* Badges. */
 .qdp-badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-brand-primary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;line-height:17px}
-.qdp-badgeError{background:transparent;color:var(--dsw-alias-state-error-primary)}
-.qdp-badgeMuted{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 
 /* Overall remaining + share line, ahead of the detail table. */
 .qdp-totalLine{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary)}
 .qdp-totalValue{font-size:22px;font-weight:600;color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;margin-left:6px}
 .qdp-totalSub{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums}
+/* The heading over the detail table. Applied by the dashboard but never
+   given a rule, so it rendered with the browser's h3 defaults; stated here
+   to match its neighbour headings (.qdp-panelTitle / .qdp-noticeTitle:
+   13px, 600, 1.5, primary label) rather than inventing a new style. */
+.qdp-blockTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
 
 /* Detail table: every package, unmerged. Column heads are the settings
    shell's tertiary smallcaps; numbers are tabular; the mini bar rides under
@@ -171,15 +180,19 @@ export const QUOTA_CSS = `
    place, shareable between the unified card and any future surface, and
    free of the per-object fallback drift (identical rgba hexes had been
    restated by hand across objects). Dynamic values — progress widths,
-   active-tab state, status-dot colour — stay inline on the element. */
-.qdp-card{list-style:none;border-width:.5px;border-style:solid;border-color:var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-3);transition:border-color .16s,background .16s}
+   active-tab state, status-dot colour — stay inline on the element.
+   The declarations here are the UNION of this rule and the dashboard's card
+   rule above, because the plugin card used to match BOTH: the dashboard's
+   padding, flex-direction, gap and display were never overridden, so they
+   applied here too. Kept verbatim so this surface renders as before. */
+.qdp-card{list-style:none;border-width:.5px;border-style:solid;border-color:var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-3);transition:border-color .16s,background .16s;padding:16px 18px;flex-direction:column;gap:16px;display:flex}
 .qdp-card:hover{border-color:var(--dsw-alias-label-dimmed)}
 .qdp-cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}
 /* The disclosure header, shaped like workbuddy's .dsm-plugin-card-header:
    one full-width button so the whole row toggles, with the icon and the
    two-line title block on the left and the caret pushed right. */
 .qdp-cardHeader{align-items:flex-start;gap:12px;width:100%;padding:14px 16px;border:0;background:none;color:inherit;cursor:pointer;text-align:left;display:flex}
-.qdp-cardHead{flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0;display:flex}
+.qdp-cardHead{flex-wrap:wrap;flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0;display:flex}
 .qdp-cardTitle{font-size:15px;line-height:1.4;font-weight:600;color:var(--dsw-alias-label-primary);text-align:left}
 .qdp-cardDescription{font-size:13px;line-height:1.45;color:var(--dsw-alias-label-tertiary);text-align:left}
 .qdp-cardIcon{flex:none;width:32px;height:32px;border-radius:7px;display:block}
@@ -192,11 +205,8 @@ export const QUOTA_CSS = `
    here read as a second, doubled line across the card (and looked like an
    outer box around the panes). The rule belongs to whoever draws the header. */
 .qdp-cardBody{margin:0 16px;padding:12px 0 8px;display:flex;flex-direction:column;gap:18px}
-.qdp-h3{margin:0;font-size:13px;line-height:1.5;font-weight:600;color:var(--dsw-alias-label-primary)}
 .qdp-body{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
 .qdp-error{margin:0;font-size:13px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}
-.qdp-row{align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;display:flex}
-.qdp-status{align-items:center;gap:8px;font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary);display:flex}
 .qdp-list{flex-direction:column;gap:18px;padding-top:2px;display:flex}
 .qdp-group{flex-direction:column;gap:10px;display:flex}
 .qdp-label{justify-content:space-between;gap:12px;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary);display:flex}
@@ -227,8 +237,6 @@ export const QUOTA_CSS = `
 .qdp-segItem:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .qdp-segItemActive{border-color:var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-weight:500}
 /* Context preference + model rows. */
-.qdp-contextPref{align-items:flex-start;gap:9px;border:.5px solid var(--dsw-alias-border-l4);border-radius:8px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5;padding:10px 12px;display:flex}
-.qdp-contextPrefCopy{flex-direction:column;gap:2px;display:flex}
 .qdp-contextPicker{align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;display:flex}
 /* Column headings for the model list, sitting on the divider the user drew
    above the list: the rule separates the refresh toolbar from the list, and
@@ -274,20 +282,14 @@ export const QUOTA_CSS = `
 /* The origin marker: the track starts at 0 for every model, and the user
    asked for that start to be visible without printing the number 0. */
 .qdp-windowTickMark{display:inline-block;width:1px;height:4px;background:var(--dsw-alias-border-l4)}
-.qdp-windowValue{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
 .qdp-track{height:8px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-bg-layer-2)}
-.qdp-checkinRow{align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex}
-.qdp-checkinHead{border-bottom:1px solid var(--dsw-alias-border-l2);padding-bottom:6px;font-size:12px;color:var(--dsw-alias-label-tertiary);display:flex}
 .qdp-logList{flex-direction:column;gap:6px;display:flex}
 /* Usage & check-in panel: one bordered surface, usage above a divider,
    check-in below (workbuddy's credit-panel shape, restated for qdp-). */
 .qdp-panel{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-2);padding:14px;gap:12px;display:flex;flex-direction:column}
-.qdp-panelDivide{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px}
 .qdp-panelHead{align-items:baseline;justify-content:space-between;gap:12px;display:flex}
 .qdp-panelTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
 .qdp-panelMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;font-variant-numeric:tabular-nums}
-.qdp-checkinLine{align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;display:flex}
-.qdp-checkinState{align-items:center;gap:8px;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary);display:flex;min-width:0}
 /* Bottom tab strip: two panes side by side, an underline marks the active
    one. Quiet pills would compete with the panel headings above. */
 .qdp-paneTabs{gap:18px;border-bottom:1px solid var(--dsw-alias-border-l2);margin-top:2px;display:flex}
@@ -306,18 +308,15 @@ export const QUOTA_CSS = `
 .qdp-segSwitch{display:inline-flex;align-items:center;flex:none;padding:0 8px 0 2px;cursor:pointer}
 .qdp-segSwitch input{margin:0;cursor:pointer;accent-color:var(--dsw-alias-brand-primary)}
 .qdp-segSwitch input:disabled{opacity:.4;cursor:default}
-.qdp-segOff{opacity:.55}
 /* Account box + PAT box (workbuddy usage-account shape). */
 .qdp-accountBox{align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-2);padding:12px 14px;display:flex}
 .qdp-accountState{align-items:center;gap:10px;font-size:15px;font-weight:500;color:var(--dsw-alias-label-primary);display:flex}
 .qdp-accountExpiry{padding-left:19px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
 .qdp-patBox{align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-3);padding:8px 12px;display:flex}
 .qdp-patBoxCopy{flex-direction:column;gap:1px;min-width:0;display:flex}
-.qdp-patBoxName{color:var(--dsw-alias-label-primary);font-size:12px;line-height:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .qdp-patBoxMeta{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}
 /* Settings listed flat on the Usage pane: no fold, just grouped rows. */
 .qdp-settingsFlat{border-top:1px solid var(--dsw-alias-border-l2);padding-top:12px;gap:4px;display:flex;flex-direction:column}
-.qdp-settingsTitle{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}
 /* 可用额度与最近领取并列两栏:workbuddy 的 credit-panels 布局,窄屏回落单列。 */
 .qdp-twoUp{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:stretch;display:grid}
 @media (max-width:760px){.qdp-twoUp{grid-template-columns:1fr}}

@@ -528,11 +528,11 @@ export function QuotaDashboard(props: QuotaDashboardProps): React.ReactNode {
           </div>
         ) : null}
 
-        <section className="qdp-card">
-          <div className="qdp-cardHead">
+        <section className="qdp-dashCard">
+          <div className="qdp-dashCardHead">
             <span className="qdp-avatar">{activeVariant === 'qoder-global' ? 'GL' : 'CN'}</span>
             <span className="qdp-cardIdentity">
-              <span className="qdp-cardTitle">{t(nameKey)}</span>
+              <span className="qdp-dashCardTitle">{t(nameKey)}</span>
               <span className="qdp-cardOwner">{ownerText(status, t)}</span>
             </span>
             {credits?.unlimited === true ? <span className="qdp-badge">{t('quotaUnlimited')}</span> : null}

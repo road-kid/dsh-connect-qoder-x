@@ -1390,6 +1390,19 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
     return <p className="qdp-body">{parts.join(' · ')}</p>
   }
 
+  /* The coding plan the credits belong to. The upstream has always answered
+     `/api/v2/user/plan` on every account read; nothing consumed it, so a paid
+     seat looked exactly like a free one. Dates are formatted through
+     `formatCycleReset`, which falls back to the verbatim string rather than
+     inventing a date the upstream did not send. */
+  const planLine = status?.status === 'signed-in' && status.plan !== undefined
+    ? [
+      t('planTier', { name: status.plan.planTierName }),
+      status.plan.organizationName === undefined ? null : t('planOrganization', { name: status.plan.organizationName }),
+      status.plan.endDate === undefined ? null : t('planEndsAt', { date: formatCycleReset(status.plan.endDate) }),
+    ].filter(part => part !== null).join(' · ')
+    : undefined
+
   // Derive status dot for the tab switcher
   const reported = signedIn?.()
   const cnSignedIn = reported !== undefined ? reported.cn : liveSignIn.cn
@@ -1513,6 +1526,7 @@ export function QoderPluginCard(props: QoderPluginCardProps) {
                     status.pat.patTail === undefined ? null : t('patTail', { tail: `****${status.pat.patTail}` })].filter(Boolean).join(' · ')}
                 </span>
               )}
+              {planLine === undefined ? null : <span className="qdp-accountExpiry">{planLine}</span>}
             </div>
             <button type="button" className="qdp-btn" disabled={busy} onClick={() => { void manualRefresh() }}>
               {busy ? t('refreshing') : t('refresh')}
