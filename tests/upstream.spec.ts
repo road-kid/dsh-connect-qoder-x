@@ -5,6 +5,7 @@ import type { QoderCatalogModel } from '../src/qoder/catalog.ts'
 import type { QoderAccountInfo } from '../src/qoder/account.ts'
 import {
   classifyUpstreamError,
+  formatRateLabel,
   kindFromQoderFailure,
   KIND_STATUS,
   modelInfoOf,
@@ -381,6 +382,17 @@ describe('kindFromQoderFailure and classifyUpstreamError', () => {
     // is not a rate label; the honest answer is "unchanged", not "".
     expect(normalizeCredits('credits')).toBe('credits')
   })
+
+  it('formatRateLabel pads whole factors but never rounds a fractional one', () => {
+    // Whole factors read as a rate, not as a different kind of value.
+    expect(formatRateLabel(0)).toBe('x0.0')
+    expect(formatRateLabel(1)).toBe('x1.0')
+    expect(formatRateLabel(2)).toBe('x2.0')
+    // Fractions keep the upstream's precision: 0.79 must NOT become 0.8.
+    expect(formatRateLabel(0.79)).toBe('x0.79')
+    expect(formatRateLabel(1.6)).toBe('x1.6')
+    expect(formatRateLabel(0.5)).toBe('x0.5')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -609,7 +621,10 @@ describe('fetchModels: QoderCatalogModel -> QoderModelInfo', () => {
     ] })
     const models = await client.fetchModels()
     expect(models[0]).toMatchObject({ billing: { credits: 'x1.6', free: false }, supportsImages: true })
-    expect(models[1]).toMatchObject({ billing: { credits: 'x0', free: true }, supportsImages: false })
+    // Whole factors are padded to one decimal (see `formatRateLabel`), so the
+    // free tier reads `x0.0` rather than `x0`; fractional factors keep the
+    // upstream's own value, which is why the 1.6 row above stays `x1.6`.
+    expect(models[1]).toMatchObject({ billing: { credits: 'x0.0', free: true }, supportsImages: false })
     expect(models[2]).toMatchObject({ billing: { free: false, rateUnknown: true } })
     // Defaults: no declared capacity falls to the conservative window; no
     // declared output cap falls to the transport's own; an empty name is the id.

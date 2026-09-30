@@ -45,9 +45,9 @@ export interface QoderModelReasoning {
 
 /** The price the catalog reports for one model. */
 export interface QoderModelBilling {
-  /** Rate label, spelled `x<n>` (a multiplier on the base rate). */
+  /** Rate label, spelled `x<n>` with whole factors padded (`x0.0`, `x1.0`). */
   credits?: string
-  /** Whether the model is free; the `x0` marker and nothing else sets this. */
+  /** Whether the model is free; the zero factor and nothing else sets this. */
   free: boolean
   /** The upstream disclosed no rate; the card shows "rate unknown". */
   rateUnknown?: boolean

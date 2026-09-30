@@ -625,7 +625,7 @@ describe('Qoder Host settings integration', () => {
     expect(row.contextWindow).toBe(300_000)
     expect(row.defaultContextWindow).toBe(300_000)
     expect(row.supportedContextWindows).toEqual([300_000, 1_000_000])
-    expect(row.billing).toEqual({ credits: 'x1', free: false })
+    expect(row.billing).toEqual({ credits: 'x1.0', free: false })
     expect(row.reasoning).toBeUndefined()
     // The roster lives where the plan says it does, one file per variant.
     root = await mkdtemp(join(tmpdir(), 'dsh-connect-qoder-x-ident-'))
